@@ -20,7 +20,7 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 USER_AGENT = "HomeStock/0.2 (https://github.com/TheRoyalCaptain/Home-Stock)"
 
 
