@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.2.0"
+version: "0.2.1"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -18,6 +18,8 @@ description: >-
   DYMO LabelWriter en het juiste labelformaat. Direct printen via de USB-poort van
   de Umbrel-server wordt later als optionele printerservice toegevoegd.
 releaseNotes: >-
+  v0.2.1 vervangt browserpop-ups door formulieren met dropdowns, aantallen,
+  locatiekeuze en foutmeldingen binnen de app.
   Volledig vernieuwde v0.2 met voorraadpartijen, vaste en eigen locaties,
   Open Food Facts, Gemini-houdbaarheidsinschatting, prijzen, winkels,
   verbruik- en verspillingstatistieken, huishoudprofielen, geschiedenis,
