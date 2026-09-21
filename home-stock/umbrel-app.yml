@@ -2,20 +2,26 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.1.0"
+version: "0.2.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
-  Home Stock is een eenvoudige, volledig zelfgehoste voorraadassistent voor thuis.
-  Beheer producten per kast, koelkast of vriezer, zie wat bijna op of over datum is,
-  maak automatisch een boodschappenlijst en druk compacte productlabels af.
+  Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
+  Beheer losse voorraadpartijen in de koelkast, vriezer, voorraadkast of eigen
+  locaties. Scan winkelbarcodes, laat producten invullen via Open Food Facts en
+  bepaal automatisch een aanpasbare houdbaarheidsdatum met lokale regels en
+  optioneel Gemini Free Tier.
 
 
-  De eerste versie print labels via het afdrukvenster van je browser. Kies daar je
+  Labels worden bij het toevoegen direct als controleerbaar voorbeeld gemaakt.
+  Kies daarna overslaan, in de wachtrij plaatsen of afdrukken via het
+  afdrukvenster van je browser. Kies daar je
   DYMO LabelWriter en het juiste labelformaat. Direct printen via de USB-poort van
   de Umbrel-server wordt later als optionele printerservice toegevoegd.
 releaseNotes: >-
-  Eerste versie met voorraadbeheer, houdbaarheidscontrole, boodschappenlijst,
-  barcodevelden, CSV/JSON-export en DYMO-labelweergave.
+  Volledig vernieuwde v0.2 met voorraadpartijen, vaste en eigen locaties,
+  Open Food Facts, Gemini-houdbaarheidsinschatting, prijzen, winkels,
+  verbruik- en verspillingstatistieken, huishoudprofielen, geschiedenis,
+  meldingen, recepten, maaltijdplanning en een DYMO-labelwachtrij.
 
 developer: Kevin van Krugten
 website: https://github.com/TheRoyalCaptain/Home-Stock
