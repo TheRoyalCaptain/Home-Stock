@@ -1,5 +1,9 @@
 FROM python:3.13-slim
 
+LABEL org.opencontainers.image.source="https://github.com/TheRoyalCaptain/Home-Stock" \
+      org.opencontainers.image.description="Self-hosted household stock and expiry tracker for umbrelOS" \
+      org.opencontainers.image.licenses="MIT"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME_STOCK_DATA_DIR=/data
