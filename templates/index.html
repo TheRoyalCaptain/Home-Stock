@@ -89,7 +89,7 @@
       <article class="panel"><h2>Profielen</h2><div id="profiles-list" class="list"></div>
         <form id="profile-form" class="inline-form"><input name="avatar" value="👤" maxlength="4"><input name="name" placeholder="Naam" required><button class="primary">＋</button></form></article>
       <article class="panel"><h2>Labels en meldingen</h2><form id="general-form" class="stack">
-        <label>Standaard label<select name="label_size"><option value="57x32">57 × 32 mm</option><option value="101x54">DYMO 99014 · 101 × 54 mm</option></select></label>
+        <label>Standaard label<select name="label_size"><option value="101x54">DYMO 99014 · verticaal 54 × 101 mm</option><option value="57x32">Compact · 57 × 32 mm</option></select></label>
         <label>Standaard afdrukmethode<select name="print_mode"><option value="server">Direct via USB-printer op de server</option><option value="browser">Afdrukvenster van de browser</option></select></label>
         <label>Standaard USB-printer<select name="default_printer" id="default-printer"><option value="">Automatisch kiezen</option></select></label>
         <div id="printer-status" class="estimate-box">Printerstatus wordt opgehaald…</div>
@@ -106,11 +106,14 @@
   <div class="modal-head"><div><h2>Product toevoegen</h2><p>Scan een barcode of vul het product in.</p></div><button type="button" class="close" data-close>×</button></div>
   <div class="barcode-row"><input name="barcode" id="barcode-input" inputmode="numeric" placeholder="Barcode scannen of typen"><button type="button" class="secondary" id="barcode-lookup">Opzoeken</button><span id="lookup-state"></span></div>
   <div class="form-grid">
-    <label class="wide">Naam<input name="name" required></label><label>Merk<input name="brand"></label><label>Categorie<input name="category"></label>
+    <label>Soort<select name="product_type" id="product-type"><option value="homemade">Zelfgemaakt / bak eten</option><option value="store">Winkelproduct</option></select></label><label>Naam<input name="name" required></label>
+    <label class="wide">Inhoud of ingrediënten<textarea name="contents" rows="2" placeholder="Bijvoorbeeld: pasta, vegetarisch gehakt, tomaat en kaas"></textarea></label>
+    <label>Merk<input name="brand"></label><label>Categorie<input name="category"></label>
     <label>Aantal<input name="quantity" type="number" min="0" step=".01" value="1"></label><label>Eenheid<input name="unit" value="stuks"></label>
     <label>Minimumvoorraad<input name="minimum" type="number" min="0" step=".01" value="0"></label><label>Locatie<select name="location_id" id="product-location"></select></label>
     <label>Winkel<input name="store"></label><label>Prijs per eenheid<input name="unit_price" type="number" min="0" step=".01"></label>
-    <label>Aankoop-/bereidingsdatum<input name="purchase_date" type="date"></label><label>Houdbaar tot<input name="expiry_date" type="date"></label>
+    <label>Ingelegd of gekocht op<input name="purchase_date" type="date"></label><label><span id="production-date-label">Bereid op</span><input name="production_date" type="date"></label>
+    <label>Houdbaar tot / einddatum<input name="expiry_date" type="date"></label>
   </div>
   <div class="estimate-box"><button type="button" class="secondary" id="estimate-expiry">✨ Houdbaarheid bepalen</button><span id="estimate-result">Lokale regels worden eerst gebruikt.</span></div>
   <label class="checkline"><input name="remember_shelf" type="checkbox"> Deze aangepaste houdbaarheid onthouden voor dit product en deze locatie</label>
@@ -122,7 +125,15 @@
 <dialog id="detail-dialog"><div class="modal"><div class="modal-head"><div><h2 id="detail-title"></h2><p id="detail-meta"></p></div><button class="close" data-close>×</button></div><div id="detail-body"></div></div></dialog>
 
 <dialog id="label-dialog"><div class="modal label-modal"><div class="modal-head"><div><h2>Labelvoorbeeld</h2><p>Controleer het label voordat je print.</p></div><button class="close" data-close>×</button></div>
-  <div id="print-label" class="print-label"><strong id="label-name"></strong><b id="label-detail"></b><img id="label-barcode" alt="Barcode"><span id="label-footer"></span></div>
+  <div id="print-label" class="print-label storage-label">
+    <div class="storage-label-head"><b id="label-location"></b><span id="label-type"></span></div>
+    <strong id="label-name"></strong><div class="label-code" id="label-code"></div>
+    <img id="label-barcode" alt="Barcode">
+    <div class="label-contents"><small>INHOUD</small><span id="label-contents"></span></div>
+    <div class="label-dates"><div><small id="label-production-title">BEREID</small><b id="label-production"></b></div><div><small>EINDDATUM</small><b id="label-expiry"></b></div></div>
+    <div class="label-meta"><span id="label-owner"></span><span id="label-quantity"></span></div>
+    <small id="label-footer"></small>
+  </div>
   <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="secondary" id="label-browser-print">Via browser printen</button><button class="primary" id="label-print">Direct printen</button></div></div></dialog>
 
 <dialog id="recipe-dialog"><form id="recipe-form" class="modal"><div class="modal-head"><div><h2>Recept toevoegen</h2></div><button type="button" class="close" data-close>×</button></div>

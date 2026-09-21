@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,9 +14,17 @@ class PrinterServiceTest(unittest.TestCase):
                 path = Path(folder) / f"{size}.pdf"
                 printer_service.label_pdf({"label_size":size,"name":"Melk",
                     "detail":"1 liter · THT 2026-09-30","footer":"Koelkast · HS-123",
-                    "barcode":"HS-123"}, path)
-                self.assertTrue(path.read_bytes().startswith(b"%PDF"))
+                    "barcode":"HS-123","short_code":"ME001","location":"Koelkast",
+                    "contents":"Halfvolle melk","production_date":"2026-09-21",
+                    "expiry_date":"2026-09-30","placed_by":"Kevin"}, path)
+                data=path.read_bytes()
+                self.assertTrue(data.startswith(b"%PDF"))
                 self.assertGreater(path.stat().st_size, 1000)
+                if size=="101x54":
+                    self.assertRegex(data,br"/MediaBox\s*\[\s*0\s+0\s+153[^]]+286")
+
+    def test_dutch_label_date(self):
+        self.assertEqual(printer_service.label_date("2026-07-20"),"20 JUL 2026")
 
     def test_detects_only_supported_usb_dymo(self):
         output = """direct usb://DYMO/LabelWriter%20450?serial=ABC

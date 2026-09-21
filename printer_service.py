@@ -69,29 +69,70 @@ def safe_text(value, limit):
     return str(value or "").replace("\n", " ").strip()[:limit]
 
 
+def label_date(value):
+    if not value:return "—"
+    try:
+        year,month,day=str(value).split("-")[:3]
+        months=["JAN","FEB","MRT","APR","MEI","JUN","JUL","AUG","SEP","OKT","NOV","DEC"]
+        return f"{int(day):02d} {months[int(month)-1]} {year}"
+    except (ValueError,IndexError):return safe_text(value,20)
+
+
+def wrapped(canvas, text, x, y, max_width, font="Helvetica", size=7, lines=3, leading=None):
+    words=safe_text(text,240).split();rows=[];current=""
+    for word in words:
+        candidate=(current+" "+word).strip()
+        if canvas.stringWidth(candidate,font,size)<=max_width:current=candidate
+        else:
+            if current:rows.append(current)
+            current=word
+            if len(rows)>=lines:break
+    if current and len(rows)<lines:rows.append(current)
+    leading=leading or size*1.2
+    canvas.setFont(font,size)
+    for index,row in enumerate(rows):canvas.drawString(x,y-index*leading,row)
+    return rows
+
+
 def label_pdf(data, path):
-    sizes = {"57x32": (57*mm, 32*mm), "101x54": (101*mm, 54*mm)}
+    sizes = {"57x32": (57*mm, 32*mm), "101x54": (54*mm, 101*mm)}
     width, height = sizes.get(data.get("label_size"), sizes["57x32"])
     canvas = Canvas(str(path), pagesize=(width, height), pageCompression=1)
-    margin = 2.2*mm
-    name = safe_text(data.get("name"), 55)
-    detail = safe_text(data.get("detail"), 70)
-    footer = safe_text(data.get("footer"), 70)
-    value = safe_text(data.get("barcode"), 80) or "HOME-STOCK"
-    canvas.setFont("Helvetica-Bold", 10 if width < 80*mm else 14)
-    canvas.drawString(margin, height-margin-8, name)
-    canvas.setFont("Helvetica", 7 if width < 80*mm else 10)
-    canvas.drawString(margin, height-margin-18, detail)
-    barcode = code128.Code128(value, barHeight=9*mm if height < 40*mm else 17*mm,
-                              barWidth=.23*mm, humanReadable=True)
-    scale = min(1, (width-2*margin) / barcode.width)
-    canvas.saveState()
-    canvas.translate(margin, 3.5*mm)
-    canvas.scale(scale, 1)
-    barcode.drawOn(canvas, 0, 0)
-    canvas.restoreState()
-    canvas.setFont("Helvetica", 5.5 if width < 80*mm else 8)
-    canvas.drawRightString(width-margin, 1.5*mm, footer)
+    margin=2.3*mm;name=safe_text(data.get("name"),70)
+    value=safe_text(data.get("barcode"),80) or "HOME-STOCK"
+    if data.get("label_size")=="101x54":
+        location=safe_text(data.get("location") or "ONBEKENDE LOCATIE",30).upper()
+        kind="ZELFGEMAAKT" if data.get("product_type")=="homemade" else "WINKELPRODUCT"
+        canvas.setFillColorRGB(0,0,0);canvas.roundRect(margin,height-margin-18,width-2*margin,18,3,fill=1,stroke=0)
+        canvas.setFillColorRGB(1,1,1);canvas.setFont("Helvetica-Bold",7);canvas.drawString(margin+5,height-margin-11,location)
+        canvas.setFont("Helvetica",5);canvas.drawRightString(width-margin-5,height-margin-11,kind)
+        canvas.setFillColorRGB(0,0,0)
+        wrapped(canvas,name,margin,height-margin-32,width-2*margin,"Helvetica-Bold",11,2,12)
+        canvas.setFont("Helvetica-Bold",25);canvas.drawCentredString(width/2,height-margin-76,safe_text(data.get("short_code"),5))
+        barcode=code128.Code128(value,barHeight=10*mm,barWidth=.22*mm,humanReadable=False)
+        scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,height-margin-112);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,height-margin-122,"INHOUD / INGREDIËNTEN")
+        wrapped(canvas,data.get("contents") or name,margin,height-margin-132,width-2*margin,"Helvetica",7,3,8)
+        box_y=31*mm;box_h=12*mm;gap=1.5*mm;box_w=(width-2*margin-gap)/2
+        production=data.get("production_date") or data.get("purchase_date")
+        production_title=("BEREID" if data.get("product_type")=="homemade" else "GEPRODUCEERD") if data.get("production_date") else "INGELEGD"
+        for x,title,value_date in ((margin,production_title,production),(margin+box_w+gap,"EINDDATUM",data.get("expiry_date"))):
+            canvas.roundRect(x,box_y,box_w,box_h,3,fill=0,stroke=1);canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(x+4,box_y+box_h-8,title);canvas.setFont("Helvetica-Bold",7);canvas.drawString(x+4,box_y+7,label_date(value_date))
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,24*mm,"INGELEGD DOOR "+safe_text(data.get("placed_by") or "ONBEKEND",24).upper())
+        canvas.drawRightString(width-margin,24*mm,safe_text(data.get("detail"),30))
+        canvas.line(margin,21.5*mm,width-margin,21.5*mm)
+        descriptor=" · ".join(x for x in (safe_text(data.get("brand"),25),safe_text(data.get("category"),25)) if x)
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,16.5*mm,"PRODUCTINFORMATIE")
+        canvas.setFont("Helvetica",6.5);canvas.drawString(margin,13*mm,descriptor or kind.title())
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,7.5*mm,"PARTIJ")
+        canvas.setFont("Helvetica",6.5);canvas.drawRightString(width-margin,7.5*mm,safe_text(data.get("footer"),60))
+        canvas.setFont("Helvetica",4.5);canvas.drawCentredString(width/2,2*mm,"HOME STOCK · BEWAARETIKET")
+    else:
+        canvas.setFont("Helvetica-Bold",9);canvas.drawString(margin,height-margin-7,name)
+        canvas.setFont("Helvetica-Bold",15);canvas.drawRightString(width-margin,height-margin-18,safe_text(data.get("short_code"),5))
+        barcode=code128.Code128(value,barHeight=8*mm,barWidth=.21*mm,humanReadable=False)
+        scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,4*mm);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
+        canvas.setFont("Helvetica",5);canvas.drawRightString(width-margin,1.5*mm,safe_text(data.get("footer"),60))
     canvas.showPage()
     canvas.save()
 
@@ -108,7 +149,7 @@ def submit(data):
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "home-stock-label.pdf"
         label_pdf({**data, "label_size": size}, path)
-        width, height = size.split("x")
+        width,height=("54","101") if size=="101x54" else ("57","32")
         result = run("lp", "-d", printer["id"], "-n", str(copies),
                      "-o", f"media=Custom.{width}x{height}mm", "-o", "fit-to-page",
                      "-t", "Home Stock label", str(path), timeout=30)

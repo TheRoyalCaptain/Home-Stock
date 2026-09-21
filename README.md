@@ -2,6 +2,25 @@
 
 Home Stock is a self-hosted household inventory and expiry tracker for umbrelOS. It combines the simple fridge overview of Fridge Assistant with practical Grocy-style stock features and printable DYMO labels.
 
+## Vertical food labels (v0.4.0)
+
+DYMO 99014 labels now print in portrait at 54 × 101 mm. The food-storage layout
+shows the storage location, homemade/store type, product name, permanent
+five-character article code, scannable lot barcode, contents or ingredients,
+production/preparation date, expiry date, quantity, the person who stored it,
+brand/category and lot number.
+
+Every product receives a permanent code made from two letters and three digits,
+such as `VP001` for Vegetarische pasta. Products sharing the same initials are
+numbered consecutively. Existing products receive codes automatically during the
+database migration. The short code identifies the product; the barcode and lot
+number continue to identify the individual container or batch.
+
+The product form distinguishes **Zelfgemaakt / bak eten** from **Winkelproduct**.
+It includes contents/ingredients and a production or preparation date. Store
+products can leave that date empty; the label then shows the date on which the
+item was stored. The existing retail barcode and brand fields remain available.
+
 ## Login and users (v0.2.2)
 
 Every inventory page and API endpoint requires login. First login: username

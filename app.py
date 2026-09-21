@@ -9,6 +9,7 @@ import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -20,7 +21,7 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
@@ -47,6 +48,20 @@ def unique_code(connection):
         code = "HS-" + secrets.token_hex(3).upper()
         if not connection.execute("SELECT 1 FROM stock_lots WHERE lot_code=?", (code,)).fetchone():
             return code
+
+
+def article_code(connection, name):
+    clean=unicodedata.normalize("NFKD",str(name)).encode("ascii","ignore").decode()
+    words=re.findall(r"[A-Za-z]+",clean.upper())
+    if len(words)>=2:prefix=words[0][0]+words[1][0]
+    elif words:prefix=(words[0]+"X")[:2]
+    else:prefix="XX"
+    used={row[0] for row in connection.execute(
+        "SELECT short_code FROM products WHERE short_code LIKE ?",(prefix+"___",))}
+    for number_value in range(1,1000):
+        candidate=f"{prefix}{number_value:03d}"
+        if candidate not in used:return candidate
+    raise ValueError(f"Geen vrije artikelcodes meer voor {prefix}")
 
 
 def setting(connection, key, default=""):
@@ -171,7 +186,8 @@ def init_db():
           quantity REAL NOT NULL DEFAULT 0,unit TEXT NOT NULL DEFAULT 'stuks',
           minimum REAL NOT NULL DEFAULT 0,location TEXT NOT NULL DEFAULT '',
           category TEXT NOT NULL DEFAULT '',barcode TEXT NOT NULL DEFAULT '',
-          expiry_date TEXT,notes TEXT NOT NULL DEFAULT '',
+          expiry_date TEXT,notes TEXT NOT NULL DEFAULT '',short_code TEXT,
+          product_type TEXT NOT NULL DEFAULT 'store',contents TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS shopping_items(
@@ -192,7 +208,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS stock_lots(
           id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,
           location_id INTEGER NOT NULL,quantity REAL NOT NULL DEFAULT 0,
-          unit TEXT NOT NULL DEFAULT 'stuks',purchase_date TEXT,expiry_date TEXT,
+          unit TEXT NOT NULL DEFAULT 'stuks',purchase_date TEXT,production_date TEXT,expiry_date TEXT,
           opened_at TEXT,unit_price REAL,store TEXT NOT NULL DEFAULT '',
           lot_code TEXT NOT NULL UNIQUE,created_by INTEGER,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -225,7 +241,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS label_jobs(
           id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,lot_id INTEGER,
           status TEXT NOT NULL DEFAULT 'queued',copies INTEGER NOT NULL DEFAULT 1,
-          template TEXT NOT NULL DEFAULT 'compact',label_size TEXT NOT NULL DEFAULT '57x32',
+          template TEXT NOT NULL DEFAULT 'storage',label_size TEXT NOT NULL DEFAULT '101x54',
           printed_at TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
           FOREIGN KEY(lot_id) REFERENCES stock_lots(id) ON DELETE SET NULL);
@@ -261,8 +277,15 @@ def init_db():
         for definition in [
             "brand TEXT NOT NULL DEFAULT ''", "image_url TEXT NOT NULL DEFAULT ''",
             "default_shelf_days INTEGER", "opened_shelf_days INTEGER",
+            "short_code TEXT", "product_type TEXT NOT NULL DEFAULT 'store'",
+            "contents TEXT NOT NULL DEFAULT ''",
         ]:
             add_column(c, "products", definition)
+        add_column(c,"stock_lots","production_date TEXT")
+        for existing in c.execute("SELECT id,name FROM products WHERE short_code IS NULL OR short_code='' ORDER BY id").fetchall():
+            c.execute("UPDATE products SET short_code=? WHERE id=?",
+                      (article_code(c,existing["name"]),existing["id"]))
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_products_short_code ON products(short_code)")
         c.executemany(
             "INSERT OR IGNORE INTO locations(name,kind,emoji,is_fixed) VALUES(?,?,?,1)",
             [("Koelkast","fridge","🧊"),("Vriezer","freezer","❄️"),("Voorraadkast","pantry","🥫")],
@@ -271,10 +294,12 @@ def init_db():
           (id,name,color,avatar,is_admin) VALUES(1,'Kevin','#14956f','👤',1)""")
         defaults = {
             "gemini_model":"gemini-3.1-flash-lite","expiry_warning_days":"7",
-            "label_size":"57x32","label_template":"compact","currency":"EUR",
+            "label_size":"101x54","label_template":"storage","currency":"EUR",
             "print_mode":"server","default_printer":"",
         }
         c.executemany("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", defaults.items())
+        c.execute("UPDATE settings SET value='101x54' WHERE key='label_size' AND value='57x32'")
+        c.execute("UPDATE settings SET value='storage' WHERE key='label_template' AND value='compact'")
         seed_rules(c)
         migrate_v1(c)
 
@@ -448,26 +473,33 @@ def create_product():
     quantity=number(p.get("quantity"),1,0)
     location_id=int(p.get("location_id") or 1)
     purchase=iso_date(p.get("purchase_date")) or date.today().isoformat()
+    production=iso_date(p.get("production_date"))
     expiry=iso_date(p.get("expiry_date"))
+    product_type=str(p.get("product_type") or "store")
+    if product_type not in {"store","homemade"}:return jsonify(error="Ongeldig producttype"),400
     barcode=re.sub(r"\s+","",str(p.get("barcode","")))
     with db() as c:
+        c.execute("BEGIN IMMEDIATE")
         loc=c.execute("SELECT * FROM locations WHERE id=?",(location_id,)).fetchone()
         if not loc:return jsonify(error="Locatie niet gevonden"),400
+        short_code=article_code(c,name)
         pid=c.execute("""INSERT INTO products
           (name,unit,minimum,category,barcode,notes,brand,image_url,
-           default_shelf_days,opened_shelf_days) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+           default_shelf_days,opened_shelf_days,short_code,product_type,contents)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
           (name,str(p.get("unit") or "stuks"),number(p.get("minimum"),0,0),
            str(p.get("category") or ""),barcode,str(p.get("notes") or ""),
            str(p.get("brand") or ""),str(p.get("image_url") or ""),
-           p.get("default_shelf_days") or None,p.get("opened_shelf_days") or None)).lastrowid
+           p.get("default_shelf_days") or None,p.get("opened_shelf_days") or None,
+           short_code,product_type,str(p.get("contents") or ""))).lastrowid
         if barcode:c.execute("INSERT INTO barcodes(product_id,barcode) VALUES(?,?)",(pid,barcode))
         lot_id=lot_code=None
         if quantity>0:
             lot_code=unique_code(c)
             lot_id=c.execute("""INSERT INTO stock_lots
-              (product_id,location_id,quantity,unit,purchase_date,expiry_date,
-               unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-              (pid,location_id,quantity,str(p.get("unit") or "stuks"),purchase,expiry,
+              (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
+               unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+              (pid,location_id,quantity,str(p.get("unit") or "stuks"),purchase,production,expiry,
                number(p.get("unit_price"),0) or None,str(p.get("store") or ""),
                lot_code,actor(p))).lastrowid
             c.execute("""INSERT INTO stock_transactions
@@ -481,16 +513,19 @@ def create_product():
               (product_id,lot_id,status,copies,template,label_size)
               VALUES(?,?,'preview',?,?,?)""",
               (pid,lot_id,int(p.get("label_copies") or 1),
-               setting(c,"label_template","compact"),setting(c,"label_size","57x32"))).lastrowid
-    return jsonify(id=pid,lot_id=lot_id,lot_code=lot_code,label_job_id=job_id),201
+               setting(c,"label_template","storage"),setting(c,"label_size","101x54"))).lastrowid
+    return jsonify(id=pid,short_code=short_code,lot_id=lot_id,lot_code=lot_code,label_job_id=job_id),201
 
 
 @app.put("/api/products/<int:product_id>")
 def update_product(product_id):
     p=body(); allowed=["name","unit","minimum","category","notes","brand",
-                      "image_url","default_shelf_days","opened_shelf_days"]
+                      "image_url","default_shelf_days","opened_shelf_days",
+                      "product_type","contents"]
     fields={k:p[k] for k in allowed if k in p}
     if not fields:return jsonify(error="Geen wijzigingen"),400
+    if "product_type" in fields and fields["product_type"] not in {"store","homemade"}:
+        return jsonify(error="Ongeldig producttype"),400
     with db() as c:
         if not c.execute("SELECT 1 FROM products WHERE id=?",(product_id,)).fetchone():
             return jsonify(error="Product niet gevonden"),404
@@ -514,12 +549,12 @@ def add_lot(product_id):
         if not product:return jsonify(error="Product niet gevonden"),404
         code=unique_code(c)
         lot_id=c.execute("""INSERT INTO stock_lots
-          (product_id,location_id,quantity,unit,purchase_date,expiry_date,
-           unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+          (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
+           unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
           (product_id,int(p.get("location_id") or 1),quantity,
            str(p.get("unit") or product["unit"]),
            iso_date(p.get("purchase_date")) or date.today().isoformat(),
-           iso_date(p.get("expiry_date")),number(p.get("unit_price"),0) or None,
+           iso_date(p.get("production_date")),iso_date(p.get("expiry_date")),number(p.get("unit_price"),0) or None,
            str(p.get("store") or ""),code,actor(p))).lastrowid
         c.execute("""INSERT INTO stock_transactions
           (product_id,lot_id,profile_id,action,quantity,unit_price,store,note)
@@ -575,6 +610,8 @@ def barcode_lookup(barcode):
         local=c.execute("""SELECT p.* FROM barcodes b JOIN products p
           ON p.id=b.product_id WHERE b.barcode=?""",(barcode,)).fetchone()
         if local:return jsonify(found=True,local=True,product=dict(local))
+        short=c.execute("SELECT * FROM products WHERE short_code=?",(barcode.upper(),)).fetchone()
+        if short:return jsonify(found=True,local=True,product=dict(short))
         lot=c.execute("""SELECT p.*,l.id lot_id,l.lot_code,l.quantity,l.expiry_date
           FROM stock_lots l JOIN products p ON p.id=l.product_id
           WHERE l.lot_code=?""",(barcode.upper(),)).fetchone()
@@ -772,11 +809,14 @@ def delete_shopping(item_id):
 @app.get("/api/labels")
 def labels():
     with db() as c:
-        rows=[dict(r) for r in c.execute("""SELECT j.*,p.name,p.brand,p.unit,
-          l.quantity,l.expiry_date,l.lot_code,loc.name location
+        rows=[dict(r) for r in c.execute("""SELECT j.*,p.name,p.brand,p.category,p.unit,
+          p.short_code,p.product_type,p.contents,l.quantity,l.purchase_date,
+          l.production_date,l.expiry_date,l.lot_code,loc.name location,
+          pr.name placed_by
           FROM label_jobs j JOIN products p ON p.id=j.product_id
           LEFT JOIN stock_lots l ON l.id=j.lot_id
           LEFT JOIN locations loc ON loc.id=l.location_id
+          LEFT JOIN profiles pr ON pr.id=l.created_by
           ORDER BY CASE j.status WHEN 'preview' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,
           j.created_at DESC""")]
     return jsonify(rows)
@@ -791,8 +831,8 @@ def create_label():
         new_id=c.execute("""INSERT INTO label_jobs
           (product_id,lot_id,status,copies,template,label_size) VALUES(?,?,?,?,?,?)""",
           (int(p["product_id"]),p.get("lot_id") or None,str(p.get("status") or "preview"),
-           int(p.get("copies") or 1),str(p.get("template") or setting(c,"label_template","compact")),
-           str(p.get("label_size") or setting(c,"label_size","57x32")))).lastrowid
+           int(p.get("copies") or 1),str(p.get("template") or setting(c,"label_template","storage")),
+           str(p.get("label_size") or setting(c,"label_size","101x54")))).lastrowid
     return jsonify(id=new_id),201
 
 
@@ -807,11 +847,13 @@ def update_label(job_id):
 
 
 def label_for_print(c, job_id):
-    return c.execute("""SELECT j.*,p.name,p.unit,l.quantity,l.expiry_date,
-      l.lot_code,loc.name location FROM label_jobs j
+    return c.execute("""SELECT j.*,p.name,p.brand,p.category,p.unit,p.short_code,p.product_type,
+      p.contents,l.quantity,l.purchase_date,l.production_date,l.expiry_date,
+      l.lot_code,loc.name location,pr.name placed_by FROM label_jobs j
       JOIN products p ON p.id=j.product_id
       LEFT JOIN stock_lots l ON l.id=j.lot_id
-      LEFT JOIN locations loc ON loc.id=l.location_id WHERE j.id=?""",(job_id,)).fetchone()
+      LEFT JOIN locations loc ON loc.id=l.location_id
+      LEFT JOIN profiles pr ON pr.id=l.created_by WHERE j.id=?""",(job_id,)).fetchone()
 
 
 @app.get("/api/printers")
@@ -827,7 +869,7 @@ def test_server_printer():
     p=body()
     with db() as c:
         printer=str(p.get("printer") or setting(c,"default_printer",""))
-        size=str(p.get("label_size") or setting(c,"label_size","57x32"))
+        size=str(p.get("label_size") or setting(c,"label_size","101x54"))
     try:
         return jsonify(print_service("/test",{"printer":printer,"label_size":size}))
     except RuntimeError as error:
@@ -841,9 +883,13 @@ def print_server_label(job_id):
         if not job:return jsonify(error="Label niet gevonden"),404
         printer=setting(c,"default_printer","")
         detail=f"{number(job['quantity']):g} {job['unit']}"
-        if job["expiry_date"]:detail+=f" · THT {job['expiry_date']}"
         payload={"printer":printer,"name":job["name"],"detail":detail,
-          "footer":f"{job['location'] or 'Home Stock'} · {job['lot_code'] or ''}",
+          "short_code":job["short_code"],"product_type":job["product_type"],
+          "contents":job["contents"],"brand":job["brand"],"category":job["category"],
+          "location":job["location"],
+          "production_date":job["production_date"],"purchase_date":job["purchase_date"],
+          "expiry_date":job["expiry_date"],"placed_by":job["placed_by"],
+          "footer":job["lot_code"] or "Home Stock",
           "barcode":job["lot_code"] or job["name"],"copies":job["copies"],
           "label_size":job["label_size"]}
     try:

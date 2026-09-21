@@ -98,12 +98,20 @@ class AuthenticationTest(unittest.TestCase):
             self.assertEqual(client.get("/api/printers").json, discovered)
             self.assertEqual(client.post("/api/printers/test", headers={"X-CSRF-Token":csrf}, json={}).status_code, 200)
             created = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
-                "name":"Printproduct","quantity":1,"location_id":1,"create_label":True}).json
+                "name":"Printproduct","quantity":1,"location_id":1,"create_label":True,
+                "product_type":"homemade","contents":"Pasta en groente",
+                "production_date":"2026-09-21","expiry_date":"2026-09-28"}).json
+            self.assertRegex(created["short_code"], r"^PR\d{3}$")
+            self.assertEqual(client.get("/api/barcode/"+created["short_code"]).json["product"]["id"], created["id"])
             response = client.post(f"/api/labels/{created['label_job_id']}/print",
                                    headers={"X-CSRF-Token":csrf}, json={})
             self.assertEqual(response.status_code, 200)
             payload = service.call_args_list[-1].args[1]
             self.assertEqual(payload["name"], "Printproduct")
+            self.assertEqual(payload["short_code"], created["short_code"])
+            self.assertEqual(payload["contents"], "Pasta en groente")
+            self.assertEqual(payload["production_date"], "2026-09-21")
+            self.assertEqual(payload["placed_by"], "Kevin")
             self.assertEqual(payload["copies"], 1)
             with db() as c:
                 self.assertEqual(c.execute("SELECT status FROM label_jobs WHERE id=?",

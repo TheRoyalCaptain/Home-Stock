@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.3.0"
+version: "0.4.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,9 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.4.0 vernieuwt het DYMO 99014-label als verticaal bewaaretiket met een
+  vaste korte artikelcode, inhoud, locatie, productie- of bereidingsdatum,
+  einddatum, hoeveelheid, partij en de persoon die het product heeft ingelegd.
   v0.3.0 voegt automatische USB-detectie, een ingebouwde CUPS-printerservice,
   direct printen, een standaardprinter en een testlabel toe voor de DYMO
   LabelWriter 400- en 450-serie.
