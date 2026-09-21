@@ -27,8 +27,72 @@ function renderProducts(){const list=filteredProducts();$('#product-grid').inner
 $('#stock-search').oninput=renderProducts;$('#stock-location').onchange=renderProducts;
 
 async function openDetail(id){const data=await api(`/api/products/${id}`),p=data.product;$('#detail-title').textContent=p.name;$('#detail-meta').textContent=`${num(p.stock)} ${p.unit} · ${p.locations||'Geen locatie'}`;$('#detail-body').innerHTML=`<h3>Partijen</h3><div class="list">${data.lots.filter(l=>l.quantity>0).map(l=>{const e=expiry(l.expiry_date);return `<div class="list-row"><span class="pill ${e.cls}">${e.txt}</span><div class="list-main"><b>${num(l.quantity)} ${esc(l.unit)} · ${esc(l.location_name)}</b><small>${esc(l.lot_code)}${l.store?' · '+esc(l.store):''}${l.unit_price?' · '+money(l.unit_price):''}</small></div><button class="secondary lot-menu" data-lot="${l.id}">Actie</button></div>`}).join('')||'<div class="empty">Geen voorraadpartijen.</div>'}</div><div class="modal-actions"><button class="secondary" data-add-lot="${p.id}">＋ Partij</button><button class="secondary" data-edit-product="${p.id}">Bewerken</button><button class="secondary" data-new-label-product="${p.id}" data-new-label-lot="${data.lots[0]?.id||''}">▤ Label</button></div>`;$$('.lot-menu').forEach(b=>b.onclick=()=>lotMenu(Number(b.dataset.lot),p.id));$('[data-add-lot]').onclick=()=>addLotPrompt(p);$('[data-edit-product]').onclick=()=>editProduct(p);$('[data-new-label-product]').onclick=()=>createLabelFor(p,data.lots[0]);$('#detail-dialog').showModal()}
-async function lotMenu(lotId,productId){const action=prompt('Actie: verbruik, verspild, geopend, verplaats of aantal','verbruik');if(!action)return;const map={verbruik:'consume',verspild:'waste',geopend:'open',verplaats:'move',aantal:'adjust'},a=map[action.toLowerCase()];if(!a)return toast('Onbekende actie');const payload={action:a,profile_id:state.profile};if(['consume','waste','adjust'].includes(a))payload.quantity=Number(prompt(a==='adjust'?'Nieuw aantal':'Hoeveel?',1)||0);if(a==='move'){const list=state.boot.locations.map(l=>`${l.id}: ${l.name}`).join('\n');payload.location_id=Number(prompt('Locatie-ID:\n'+list)||0)}await api(`/api/lots/${lotId}/action`,{method:'POST',body:JSON.stringify(payload)});toast('Voorraad bijgewerkt');closeDialogs();await loadProducts();loadDashboard()}
-async function addLotPrompt(p){const qty=Number(prompt(`Hoeveel ${p.unit} toevoegen?`,1)||0);if(!qty)return;await api(`/api/products/${p.id}/lots`,{method:'POST',body:JSON.stringify({quantity:qty,location_id:Number($('#product-location').value),profile_id:state.profile})});toast('Partij toegevoegd');closeDialogs();loadProducts()}
+// Application forms replace all native prompt/confirmation pop-ups.
+function appForm({title,description='',fields='',submit='Opslaan',setup=()=>{},save}){
+  const dialog=document.createElement('dialog');
+  dialog.setAttribute('aria-label',title);
+  dialog.innerHTML=`<form class="modal"><div class="modal-head"><div><h2>${esc(title)}</h2><p>${esc(description)}</p></div><button type="button" class="close" aria-label="Sluiten">×</button></div><div class="stack">${fields}</div><p class="form-error" role="alert" style="color:var(--red)"></p><div class="modal-actions"><button type="button" class="secondary" data-cancel>Annuleren</button><button type="submit" class="primary">${esc(submit)}</button></div></form>`;
+  document.body.append(dialog);
+  const form=$('form',dialog),button=$('[type="submit"]',form);
+  $('.close',dialog).onclick=$('[data-cancel]',dialog).onclick=()=>dialog.close();
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    if(button.disabled||!form.reportValidity())return;
+    button.disabled=true;$('.form-error',form).textContent='';
+    try{await save(Object.fromEntries(new FormData(form)));dialog.close()}
+    catch(error){$('.form-error',form).textContent=error.message}
+    finally{button.disabled=false}
+  };
+  setup(form);dialog.showModal();
+}
+function locationOptions(selected){return state.boot.locations.map(l=>`<option value="${l.id}" ${Number(selected)===l.id?'selected':''}>${esc(l.emoji)} ${esc(l.name)}</option>`).join('')}
+async function lotMenu(lotId,productId){
+  try{
+    const data=await api(`/api/products/${productId}`),lot=data.lots.find(l=>l.id===lotId);
+    if(!lot)throw Error('Partij niet gevonden');
+    appForm({
+      title:'Voorraad aanpassen',
+      description:`${data.product.name} · ${num(lot.quantity)} ${lot.unit} · ${lot.location_name}`,
+      fields:`<label>Actie<select name="action"><option value="consume">Verbruiken</option><option value="waste">Verspilling registreren</option><option value="open">Als geopend markeren</option><option value="move">Verplaatsen</option><option value="adjust">Aantal corrigeren</option></select></label><label data-quantity><span>Aantal</span><input name="quantity" type="number" step="any" required></label><label data-location>Nieuwe locatie<select name="location_id" required>${locationOptions(lot.location_id)}</select></label><label>Notitie (optioneel)<input name="note" placeholder="Bijvoorbeeld: gebruikt voor avondeten"></label>`,
+      setup:form=>{
+        const update=()=>{
+          const action=form.elements.action.value,hasQty=['consume','waste','adjust'].includes(action);
+          $('[data-quantity]',form).style.display=hasQty?'':'none';
+          form.elements.quantity.disabled=!hasQty;
+          form.elements.quantity.min=action==='adjust'?'0':'0.001';
+          if(action==='adjust')form.elements.quantity.removeAttribute('max');
+          else form.elements.quantity.max=lot.quantity;
+          form.elements.quantity.value=action==='adjust'?lot.quantity:Math.min(1,lot.quantity);
+          $('[data-quantity] span',form).textContent=action==='adjust'?'Nieuw totaal ('+lot.unit+')':'Aantal ('+lot.unit+')';
+          $('[data-location]',form).style.display=action==='move'?'':'none';
+          form.elements.location_id.disabled=action!=='move';
+        };
+        form.elements.action.onchange=update;update();
+      },
+      save:async payload=>{
+        await api(`/api/lots/${lotId}/action`,{method:'POST',body:JSON.stringify({...payload,profile_id:state.profile})});
+        await loadProducts();await loadDashboard();await openDetail(productId);toast('Voorraad bijgewerkt');
+      }
+    });
+  }catch(error){toast(error.message)}
+}
+function addLotPrompt(p){
+  appForm({
+    title:'Partij toevoegen',description:p.name,
+    fields:`<label>Aantal (${esc(p.unit)})<input name="quantity" type="number" min="0.01" step="any" value="1" required></label><label>Locatie<select name="location_id" required>${locationOptions(p.default_location_id)}</select></label><label>Houdbaar tot (optioneel)<input name="expiry_date" type="date"></label><label>Winkel (optioneel)<input name="store"></label><label>Prijs per eenheid (optioneel)<input name="unit_price" type="number" min="0" step=".01"></label>`,
+    save:async payload=>{
+      await api(`/api/products/${p.id}/lots`,{method:'POST',body:JSON.stringify({...payload,profile_id:state.profile})});
+      await loadProducts();await loadDashboard();await openDetail(p.id);toast('Partij toegevoegd');
+    }
+  });
+}
+function deleteRecipe(id){
+  const recipe=state.recipes.find(r=>r.id===Number(id));
+  appForm({title:'Recept verwijderen',description:`Wil je “${recipe?.name||'dit recept'}” verwijderen? Dit kan niet ongedaan worden gemaakt.`,submit:'Verwijderen',save:async()=>{
+    await api('/api/recipes/'+id,{method:'DELETE'});await loadRecipes();toast('Recept verwijderd');
+  }});
+}
 
 function openProduct(){const f=$('#product-form');f.reset();$('.modal-head h2',f).textContent='Product toevoegen';f.elements.quantity.value=1;f.elements.unit.value='stuks';f.elements.minimum.value=0;f.elements.label_copies.value=1;f.elements.create_label.checked=true;f.elements.purchase_date.value=new Date().toISOString().slice(0,10);$('#lookup-state').textContent='';$('#estimate-result').textContent='Lokale regels worden eerst gebruikt.';$('#product-dialog').showModal();setTimeout(()=>f.elements.barcode.focus(),100)}
 function editProduct(p){closeDialogs();openProduct();const f=$('#product-form');for(const k of ['name','brand','category','unit','minimum','notes','image_url','default_shelf_days'])if(f.elements[k])f.elements[k].value=p[k]??'';f.elements.product_id.value=p.id;f.elements.quantity.value=0;f.elements.create_label.checked=false;$('.modal-head h2',f).textContent='Product bewerken'}
@@ -42,7 +106,7 @@ $('#product-form').onsubmit=async e=>{e.preventDefault();const f=e.target,data=O
 async function loadShopping(){const items=await api('/api/shopping');$('#shopping-list').innerHTML=items.length?items.map(i=>`<div class="list-row"><input type="checkbox" ${i.checked?'checked':''} ${i.automatic?'disabled':''} data-shop-check="${i.id||''}"><div class="list-main"><b>${esc(i.name)}</b><small>${num(i.quantity)} ${esc(i.unit)}${i.automatic?' · automatisch':''}</small></div>${i.automatic?'':`<button class="secondary" data-shop-delete="${i.id}">×</button>`}</div>`).join(''):'<div class="empty">Je lijst is leeg.</div>';$$('[data-shop-check]').forEach(c=>c.onchange=async()=>{await api('/api/shopping/'+c.dataset.shopCheck,{method:'PATCH',body:JSON.stringify({checked:c.checked})});loadShopping()});$$('[data-shop-delete]').forEach(b=>b.onclick=async()=>{await api('/api/shopping/'+b.dataset.shopDelete,{method:'DELETE'});loadShopping()})}
 $('#shopping-form').onsubmit=async e=>{e.preventDefault();await api('/api/shopping',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});e.target.reset();toast('Toegevoegd');loadShopping()};
 
-async function loadRecipes(){state.recipes=await api('/api/recipes');$('#recipe-grid').innerHTML=state.recipes.length?state.recipes.map(r=>`<article class="recipe-card"><div class="product-top"><div class="product-img">${esc(r.emoji)}</div><div><h3>${esc(r.name)}</h3><p>${r.servings} porties · ${r.prep_minutes||0} min.</p></div></div><p>${r.items.length} ingrediënten</p><div class="button-row"><button class="secondary" data-recipe-shop="${r.id}">Naar lijst</button><button class="secondary" data-recipe-delete="${r.id}">Verwijder</button></div></article>`).join(''):'<div class="empty">Voeg je eerste recept toe.</div>';$$('[data-recipe-shop]').forEach(b=>b.onclick=async()=>{await api(`/api/recipes/${b.dataset.recipeShop}/shopping`,{method:'POST',body:'{}'});toast('Ontbrekende ingrediënten toegevoegd')});$$('[data-recipe-delete]').forEach(b=>b.onclick=async()=>{if(confirm('Recept verwijderen?')){await api('/api/recipes/'+b.dataset.recipeDelete,{method:'DELETE'});loadRecipes()}});renderPlanRecipes()}
+async function loadRecipes(){state.recipes=await api('/api/recipes');$('#recipe-grid').innerHTML=state.recipes.length?state.recipes.map(r=>`<article class="recipe-card"><div class="product-top"><div class="product-img">${esc(r.emoji)}</div><div><h3>${esc(r.name)}</h3><p>${r.servings} porties · ${r.prep_minutes||0} min.</p></div></div><p>${r.items.length} ingrediënten</p><div class="button-row"><button class="secondary" data-recipe-shop="${r.id}">Naar lijst</button><button class="secondary" data-recipe-delete="${r.id}">Verwijder</button></div></article>`).join(''):'<div class="empty">Voeg je eerste recept toe.</div>';$$('[data-recipe-shop]').forEach(b=>b.onclick=async()=>{await api(`/api/recipes/${b.dataset.recipeShop}/shopping`,{method:'POST',body:'{}'});toast('Ontbrekende ingrediënten toegevoegd')});$$('[data-recipe-delete]').forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.recipeDelete));renderPlanRecipes()}
 function ingredientRow(){return `<div class="ingredient-row"><input list="recipe-products" placeholder="Ingrediënt" required><input type="number" value="1" min=".01" step=".01"><input value="stuks"><button type="button" class="secondary">×</button></div>`}
 function bindIngredientRows(){$$('.ingredient-row button').forEach(b=>b.onclick=()=>b.parentElement.remove())}
 $('#add-recipe').onclick=()=>{$('#recipe-form').reset();$('#ingredient-rows').innerHTML=ingredientRow();bindIngredientRows();$('#recipe-dialog').showModal()};$('#add-ingredient').onclick=()=>{$('#ingredient-rows').insertAdjacentHTML('beforeend',ingredientRow());bindIngredientRows()};
