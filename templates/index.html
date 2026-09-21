@@ -1,71 +1,133 @@
 <!doctype html>
 <html lang="nl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#0f172a">
-  <title>Home Stock</title>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10251f"><title>Home Stock</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">H</span><div><strong>Home Stock</strong><small>Thuisvoorraad</small></div></div>
-    <nav>
-      <button class="nav-item active" data-page="dashboard">⌂ <span>Overzicht</span></button>
-      <button class="nav-item" data-page="products">▦ <span>Voorraad</span></button>
-      <button class="nav-item" data-page="expiry">◷ <span>Houdbaarheid</span></button>
-      <button class="nav-item" data-page="shopping">✓ <span>Boodschappen</span></button>
-      <button class="nav-item" data-page="labels">▤ <span>Labels</span></button>
-      <button class="nav-item" data-page="settings">⚙ <span>Instellingen</span></button>
-    </nav>
-    <div class="sidebar-foot"><span class="status-dot"></span>Alles lokaal opgeslagen</div>
-  </aside>
+<aside class="sidebar">
+  <div class="brand"><span>H</span><div><b>Home Stock</b><small>v{{ version }}</small></div></div>
+  <nav>
+    <button class="nav active" data-page="dashboard">⌂ <i>Overzicht</i></button>
+    <button class="nav" data-page="stock">▦ <i>Voorraad</i></button>
+    <button class="nav" data-page="shopping">✓ <i>Boodschappen</i></button>
+    <button class="nav" data-page="recipes">♨ <i>Recepten</i></button>
+    <button class="nav" data-page="planner">▣ <i>Maaltijdplanner</i></button>
+    <button class="nav" data-page="stats">↗ <i>Statistieken</i></button>
+    <button class="nav" data-page="labels">▤ <i>Labels</i></button>
+    <button class="nav" data-page="history">↺ <i>Geschiedenis</i></button>
+    <button class="nav" data-page="settings">⚙ <i>Instellingen</i></button>
+  </nav>
+  <div class="profile-picker"><label>Actief profiel<select id="profile-select"></select></label></div>
+</aside>
+<main>
+  <header><div><h1 id="page-title">Overzicht</h1><p id="page-subtitle">Je huishouden in één oogopslag.</p></div>
+    <div class="header-actions"><button class="icon-btn" id="notifications-btn" title="Meldingen">🔔<b id="notification-count"></b></button>
+    <button class="primary" id="add-product">＋ Product toevoegen</button></div></header>
 
-  <main>
-    <header class="topbar">
-      <div><h1 id="page-title">Goedemiddag</h1><p id="page-subtitle">Dit is de stand van je voorraad.</p></div>
-      <button class="primary" id="add-product">+ Product toevoegen</button>
-    </header>
+  <section class="page active" id="page-dashboard">
+    <div class="stats"><article><span>▦</span><small>Producten</small><b id="stat-products">0</b></article>
+      <article><span>Σ</span><small>Totale voorraad</small><b id="stat-units">0</b></article>
+      <article><span>◷</span><small>Binnen 7 dagen</small><b id="stat-expiring">0</b></article>
+      <article><span>↓</span><small>Bijna op</small><b id="stat-low">0</b></article></div>
+    <div class="grid two"><article class="panel"><div class="panel-head"><div><h2>Aandacht nodig</h2><p>Oudste partijen en lage voorraad</p></div></div><div id="attention-list" class="list"></div></article>
+      <article class="panel"><div class="panel-head"><div><h2>Recente activiteit</h2><p>Wie deed wat</p></div></div><div id="recent-list" class="list"></div></article></div>
+  </section>
 
-    <section class="page active" id="page-dashboard">
-      <div class="stats">
-        <article><span class="stat-icon green">▦</span><div><small>Producten</small><strong id="stat-total">0</strong></div></article>
-        <article><span class="stat-icon amber">↓</span><div><small>Bijna op</small><strong id="stat-low">0</strong></div></article>
-        <article><span class="stat-icon red">◷</span><div><small>Binnen 7 dagen</small><strong id="stat-expiring">0</strong></div></article>
-        <article><span class="stat-icon blue">⌂</span><div><small>Locaties</small><strong id="stat-locations">0</strong></div></article>
-      </div>
-      <div class="dashboard-grid">
-        <article class="panel"><div class="panel-head"><div><h2>Aandacht nodig</h2><p>Bijna op of snel over datum</p></div><button class="text-button" data-go="products">Alles bekijken →</button></div><div id="attention-list" class="list empty-state">Nog geen producten</div></article>
-        <article class="panel"><div class="panel-head"><div><h2>Snel toevoegen</h2><p>Maak een product aan</p></div></div><form id="quick-form" class="stack"><label>Productnaam<input name="name" placeholder="Bijv. halfvolle melk" required></label><div class="form-row"><label>Aantal<input name="quantity" type="number" min="0" step="0.1" value="1"></label><label>Locatie<input name="location" placeholder="Koelkast"></label></div><button class="primary wide">Toevoegen</button></form></article>
-      </div>
-    </section>
+  <section class="page" id="page-stock">
+    <div class="toolbar"><div class="search">⌕<input id="stock-search" placeholder="Zoek product, barcode of locatie"></div>
+      <select id="stock-location"><option value="">Alle locaties</option></select>
+      <button class="secondary" id="scan-open">▣ Barcode scannen</button></div>
+    <div id="product-grid" class="product-grid"></div>
+  </section>
 
-    <section class="page" id="page-products">
-      <div class="toolbar"><div class="search"><span>⌕</span><input id="product-search" placeholder="Zoek op naam, barcode, categorie of locatie"></div><select id="location-filter"><option value="">Alle locaties</option></select></div>
-      <article class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Product</th><th>Voorraad</th><th>Locatie</th><th>Houdbaar</th><th></th></tr></thead><tbody id="product-table"></tbody></table></div><div id="product-empty" class="empty-state">Voeg je eerste product toe.</div></article>
-    </section>
+  <section class="page" id="page-shopping">
+    <div class="grid two"><article class="panel"><div class="panel-head"><div><h2>Boodschappenlijst</h2><p>Minimumvoorraad wordt automatisch aangevuld</p></div></div><div id="shopping-list" class="list"></div></article>
+      <article class="panel"><h2>Handmatig toevoegen</h2><form id="shopping-form" class="stack"><label>Product<input name="name" required></label><div class="row"><label>Aantal<input name="quantity" type="number" value="1" min=".01" step=".01"></label><label>Eenheid<input name="unit" value="stuks"></label></div><button class="primary">Toevoegen</button></form></article></div>
+  </section>
 
-    <section class="page" id="page-expiry">
-      <article class="panel"><div class="panel-head"><div><h2>Houdbaarheid</h2><p>Gesorteerd op eerst aflopende datum</p></div></div><div id="expiry-list" class="list"></div></article>
-    </section>
+  <section class="page" id="page-recipes">
+    <div class="section-actions"><p>Recepten controleren automatisch je voorraad.</p><button class="primary" id="add-recipe">＋ Recept</button></div>
+    <div id="recipe-grid" class="product-grid"></div>
+  </section>
 
-    <section class="page" id="page-shopping">
-      <div class="dashboard-grid shopping-grid"><article class="panel"><div class="panel-head"><div><h2>Boodschappenlijst</h2><p>Lage voorraad wordt automatisch toegevoegd</p></div></div><div id="shopping-list" class="list"></div></article><article class="panel"><div class="panel-head"><div><h2>Handmatig toevoegen</h2></div></div><form id="shopping-form" class="stack"><label>Wat heb je nodig?<input name="name" required placeholder="Bijv. vaatwastabletten"></label><div class="form-row"><label>Aantal<input name="quantity" type="number" min="0.01" step="0.1" value="1"></label><label>Eenheid<input name="unit" value="stuks"></label></div><button class="primary wide">Op lijst zetten</button></form></article></div>
-    </section>
+  <section class="page" id="page-planner">
+    <div class="section-actions"><p>Plan maaltijden en zet ontbrekende ingrediënten op de lijst.</p><button class="primary" id="add-plan">＋ Maaltijd plannen</button></div>
+    <div id="meal-plan" class="calendar-list"></div>
+  </section>
 
-    <section class="page" id="page-labels">
-      <div class="dashboard-grid"><article class="panel"><div class="panel-head"><div><h2>DYMO-label maken</h2><p>Standaard 57 × 32 mm</p></div></div><form id="label-form" class="stack"><label>Product<select id="label-product" required></select></label><label>Extra tekst<input id="label-extra" placeholder="Bijv. geopend op 21-09"></label><button class="primary wide" type="submit">Voorbeeld bijwerken</button></form></article><article class="panel label-stage"><div id="label-preview" class="label"><strong>Kies een product</strong><span>Home Stock</span></div><button class="secondary" id="print-label">Label afdrukken</button></article></div>
-    </section>
+  <section class="page" id="page-stats">
+    <div class="toolbar"><select id="stats-days"><option value="30">Laatste 30 dagen</option><option value="90">90 dagen</option><option value="365">1 jaar</option></select></div>
+    <div class="stats"><article><span>€</span><small>Uitgegeven</small><b id="stat-spent">€ 0</b></article>
+      <article><span>✓</span><small>Verbruikt</small><b id="stat-consumed">0</b></article>
+      <article><span>♻</span><small>Verspild</small><b id="stat-wasted">0</b></article>
+      <article><span>€</span><small>Waarde verspilling</small><b id="stat-waste-value">€ 0</b></article></div>
+    <div class="grid two"><article class="panel"><h2>Uitgaven per winkel</h2><div id="store-bars" class="bars"></div></article>
+      <article class="panel"><h2>Meest verspild</h2><div id="waste-list" class="list"></div></article></div>
+  </section>
 
-    <section class="page" id="page-settings">
-      <article class="panel settings-card"><h2>Gegevens</h2><p>Download je voorraad als spreadsheet of maak een volledige reservekopie.</p><div class="button-row"><a class="secondary" href="/api/export.csv">CSV exporteren</a><a class="secondary" href="/api/backup.json">JSON-back-up</a></div><hr><h2>Printer</h2><p>Gebruik bij het afdrukken de DYMO LabelWriter, papierformaat 57 × 32 mm, schaal 100% en geen marges.</p><p class="muted">Direct afdrukken via de USB-poort van Umbrel volgt als optionele uitbreiding.</p></article>
-    </section>
-  </main>
+  <section class="page" id="page-labels">
+    <div class="section-actions"><p>Bekijk, groepeer en druk labels af.</p><button class="secondary" id="print-queue">Print wachtrij</button></div>
+    <div id="label-grid" class="label-grid"></div>
+  </section>
 
-  <dialog id="product-dialog">
-    <form id="product-form" class="modal-card"><div class="modal-head"><div><h2 id="modal-title">Product toevoegen</h2><p>Leg voorraad en houdbaarheid vast.</p></div><button type="button" class="icon-button" data-close>×</button></div><input name="id" type="hidden"><div class="form-grid"><label class="span-2">Naam<input name="name" required autofocus></label><label>Aantal<input name="quantity" type="number" min="0" step="0.1" value="1"></label><label>Eenheid<input name="unit" value="stuks"></label><label>Minimumvoorraad<input name="minimum" type="number" min="0" step="0.1" value="0"></label><label>Houdbaar tot<input name="expiry_date" type="date"></label><label>Locatie<input name="location" placeholder="Koelkast"></label><label>Categorie<input name="category" placeholder="Zuivel"></label><label class="span-2">Barcode<input name="barcode" inputmode="numeric" placeholder="Scan of typ een EAN-code"></label><label class="span-2">Notities<textarea name="notes" rows="3"></textarea></label></div><div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Opslaan</button></div></form>
-  </dialog>
-  <div id="toast" role="status"></div>
-  <script src="/static/app.js"></script>
-</body>
-</html>
+  <section class="page" id="page-history"><article class="panel"><div id="history-list" class="history-table"></div></article></section>
+
+  <section class="page" id="page-settings">
+    <div class="settings-grid">
+      <article class="panel"><h2>Gemini Free Tier</h2><p>Alleen gebruikt als lokale houdbaarheidsregels geen goede match vinden.</p>
+        <form id="ai-form" class="stack"><label>Gemini API-key<input name="gemini_api_key" type="password" placeholder="Bestaande key wordt niet getoond"></label>
+          <label>Model<input name="gemini_model" value="gemini-3.1-flash-lite"></label><button class="primary">Opslaan</button></form></article>
+      <article class="panel"><h2>Locaties</h2><div id="locations-list" class="list"></div>
+        <form id="location-form" class="inline-form"><input name="emoji" value="📦" maxlength="4"><input name="name" placeholder="Nieuwe locatie" required><button class="primary">＋</button></form></article>
+      <article class="panel"><h2>Profielen</h2><div id="profiles-list" class="list"></div>
+        <form id="profile-form" class="inline-form"><input name="avatar" value="👤" maxlength="4"><input name="name" placeholder="Naam" required><button class="primary">＋</button></form></article>
+      <article class="panel"><h2>Labels en meldingen</h2><form id="general-form" class="stack">
+        <label>Standaard label<select name="label_size"><option value="57x32">57 × 32 mm</option><option value="101x54">DYMO 99014 · 101 × 54 mm</option></select></label>
+        <label>Waarschuwen vóór houdbaarheid<input name="expiry_warning_days" type="number" min="1" value="7"></label><button class="primary">Opslaan</button></form></article>
+      <article class="panel"><h2>Gegevens</h2><div class="button-row"><a class="secondary" href="/api/export.csv">CSV-export</a><a class="secondary" href="/api/backup.json">JSON-back-up</a></div></article>
+    </div>
+  </section>
+</main>
+
+<dialog id="product-dialog"><form id="product-form" class="modal">
+  <input name="product_id" type="hidden"><input name="image_url" type="hidden"><input name="default_shelf_days" type="hidden">
+  <div class="modal-head"><div><h2>Product toevoegen</h2><p>Scan een barcode of vul het product in.</p></div><button type="button" class="close" data-close>×</button></div>
+  <div class="barcode-row"><input name="barcode" id="barcode-input" inputmode="numeric" placeholder="Barcode scannen of typen"><button type="button" class="secondary" id="barcode-lookup">Opzoeken</button><span id="lookup-state"></span></div>
+  <div class="form-grid">
+    <label class="wide">Naam<input name="name" required></label><label>Merk<input name="brand"></label><label>Categorie<input name="category"></label>
+    <label>Aantal<input name="quantity" type="number" min="0" step=".01" value="1"></label><label>Eenheid<input name="unit" value="stuks"></label>
+    <label>Minimumvoorraad<input name="minimum" type="number" min="0" step=".01" value="0"></label><label>Locatie<select name="location_id" id="product-location"></select></label>
+    <label>Winkel<input name="store"></label><label>Prijs per eenheid<input name="unit_price" type="number" min="0" step=".01"></label>
+    <label>Aankoop-/bereidingsdatum<input name="purchase_date" type="date"></label><label>Houdbaar tot<input name="expiry_date" type="date"></label>
+  </div>
+  <div class="estimate-box"><button type="button" class="secondary" id="estimate-expiry">✨ Houdbaarheid bepalen</button><span id="estimate-result">Lokale regels worden eerst gebruikt.</span></div>
+  <label class="checkline"><input name="remember_shelf" type="checkbox"> Deze aangepaste houdbaarheid onthouden voor dit product en deze locatie</label>
+  <hr><div class="label-choice"><label class="checkline"><input name="create_label" type="checkbox" checked> Label maken na opslaan</label><label>Aantal labels<input name="label_copies" type="number" min="1" max="99" value="1"></label></div>
+  <label>Notities<textarea name="notes" rows="2"></textarea></label>
+  <div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Product opslaan</button></div>
+</form></dialog>
+
+<dialog id="detail-dialog"><div class="modal"><div class="modal-head"><div><h2 id="detail-title"></h2><p id="detail-meta"></p></div><button class="close" data-close>×</button></div><div id="detail-body"></div></div></dialog>
+
+<dialog id="label-dialog"><div class="modal label-modal"><div class="modal-head"><div><h2>Labelvoorbeeld</h2><p>Controleer het label voordat je print.</p></div><button class="close" data-close>×</button></div>
+  <div id="print-label" class="print-label"><strong id="label-name"></strong><b id="label-detail"></b><img id="label-barcode" alt="Barcode"><span id="label-footer"></span></div>
+  <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="primary" id="label-print">Nu printen</button></div></div></dialog>
+
+<dialog id="recipe-dialog"><form id="recipe-form" class="modal"><div class="modal-head"><div><h2>Recept toevoegen</h2></div><button type="button" class="close" data-close>×</button></div>
+  <div class="form-grid"><label class="wide">Naam<input name="name" required></label><label>Emoji<input name="emoji" value="🍽️"></label><label>Porties<input name="servings" type="number" min="1" value="2"></label><label>Bereidingstijd<input name="prep_minutes" type="number" min="0"></label></div>
+  <h3>Ingrediënten</h3><datalist id="recipe-products"></datalist><div id="ingredient-rows"></div><button type="button" class="secondary" id="add-ingredient">＋ Ingrediënt</button>
+  <label>Bereiding<textarea name="instructions" rows="5"></textarea></label><div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Opslaan</button></div></form></dialog>
+
+<dialog id="plan-dialog"><form id="plan-form" class="modal"><div class="modal-head"><h2>Maaltijd plannen</h2><button type="button" class="close" data-close>×</button></div>
+  <label>Datum<input name="plan_date" type="date" required></label><label>Moment<select name="meal"><option>ontbijt</option><option>lunch</option><option selected>avondeten</option></select></label>
+  <label>Recept<select name="recipe_id" id="plan-recipe" required></select></label><label>Porties<input name="servings" type="number" value="2" min="1"></label>
+  <div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Plannen</button></div></form></dialog>
+
+<dialog id="scan-dialog"><div class="modal"><div class="modal-head"><div><h2>Barcode scannen</h2><p>Camera werkt via HTTPS; handmatig invoeren kan altijd.</p></div><button class="close" data-close>×</button></div>
+  <video id="scan-video" autoplay playsinline></video><div class="barcode-row"><input id="scan-manual" inputmode="numeric" placeholder="Of typ de barcode"><button class="primary" id="scan-use">Gebruiken</button></div><p id="scan-state"></p></div></dialog>
+
+<dialog id="notifications-dialog"><div class="modal"><div class="modal-head"><div><h2>Meldingen</h2></div><button class="close" data-close>×</button></div><div id="notifications-list" class="list"></div><div class="modal-actions"><button class="secondary" id="notifications-read">Alles gelezen</button></div></div></dialog>
+<div id="toast"></div><script src="/static/app.js"></script>
+</body></html>
