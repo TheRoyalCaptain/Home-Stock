@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.6.1"
+version: "0.7.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,9 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.7.0 voegt een bereidingswijze toe aan het DYMO 99014-label. Gemini maakt
+  een korte instructie op basis van zowel de naam als de ingrediënten. De tekst
+  is controleerbaar, handmatig aanpasbaar en wordt per product opgeslagen.
   v0.6.1 schakelt de extra Umbrel-proxylogin uit. Home Stock opent daardoor
   rechtstreeks zijn eigen beveiligde loginpagina. De README is opnieuw
   ingedeeld en de standaard inloggegevens worden nu in Umbrel getoond.

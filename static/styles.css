@@ -153,18 +153,19 @@ header h1{font-size:23px}
 .storage-label{font-family:Arial,sans-serif;padding:2.5mm;border:1px solid #111;gap:0}
 .storage-label-head{height:7mm;background:#111;color:#fff;border-radius:1.2mm;display:flex;align-items:center;justify-content:space-between;padding:0 2mm;font-size:7pt;letter-spacing:.5px}
 .storage-label-head span{margin:0;font-size:5.5pt}
-.storage-label>strong{font-size:12pt;line-height:1.05;text-align:center;margin:2.5mm 0 1mm;max-height:13mm;overflow:hidden}
-.storage-label .label-code{font-size:25pt;line-height:1;font-weight:900;letter-spacing:1px;text-align:center}
-.storage-label>img{width:100%;height:12mm;object-fit:fill;margin:.5mm 0}
-.label-contents{border-top:.35mm solid #111;border-bottom:.35mm solid #111;padding:1.4mm 0;min-height:15mm}
-.label-contents small,.label-dates small{display:block;font-size:5.5pt;font-weight:800;letter-spacing:.5px}
-.label-contents span{display:block;font-size:7pt;line-height:1.15;margin-top:.6mm;max-height:9mm;overflow:hidden}
+.storage-label>strong{font-size:11pt;line-height:1.05;text-align:center;margin:1.5mm 0 .7mm;max-height:10mm;overflow:hidden}
+.storage-label .label-code{font-size:22pt;line-height:1;font-weight:900;letter-spacing:1px;text-align:center}
+.storage-label>img{width:100%;height:10mm;object-fit:fill;margin:.4mm 0}
+.label-contents,.label-preparation{border-top:.35mm solid #111;padding:1mm 0;min-height:11mm}
+.label-preparation{border-bottom:.35mm solid #111}
+.label-contents small,.label-preparation small,.label-dates small{display:block;font-size:5.2pt;font-weight:800;letter-spacing:.4px}
+.label-contents span,.label-preparation span{display:block;font-size:6.3pt;line-height:1.12;margin-top:.4mm;max-height:7.5mm;overflow:hidden}
 .label-dates{display:grid;grid-template-columns:1fr 1fr;gap:1.2mm;margin-top:1.5mm}
 .label-dates>div{border:.35mm solid #111;border-radius:1mm;padding:1.2mm}
 .label-dates b{display:block;font-size:8pt;margin-top:.5mm}
 .label-meta{display:flex;justify-content:space-between;gap:2mm;font-size:5.5pt;font-weight:700;border-bottom:.25mm solid #111;padding:1.5mm 0 1mm}
 .storage-label>#label-footer{font-size:5pt;text-align:center;margin-top:auto}
-.storage-label:not(.vertical-label) .label-contents,.storage-label:not(.vertical-label) .label-dates,.storage-label:not(.vertical-label) .label-meta,.storage-label:not(.vertical-label) .storage-label-head span{display:none}
+.storage-label:not(.vertical-label) .label-contents,.storage-label:not(.vertical-label) .label-preparation,.storage-label:not(.vertical-label) .label-dates,.storage-label:not(.vertical-label) .label-meta,.storage-label:not(.vertical-label) .storage-label-head span{display:none}
 .storage-label:not(.vertical-label){padding:1.5mm}
 .storage-label:not(.vertical-label) .storage-label-head{height:5mm}
 .storage-label:not(.vertical-label)>strong{font-size:9pt;margin:1mm 0}

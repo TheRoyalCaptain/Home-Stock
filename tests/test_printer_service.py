@@ -16,6 +16,7 @@ class PrinterServiceTest(unittest.TestCase):
                     "detail":"1 liter · THT 2026-09-30","footer":"Koelkast · HS-123",
                     "barcode":"HS-123","short_code":"ME001","location":"Koelkast",
                     "contents":"Halfvolle melk","production_date":"2026-09-21",
+                    "preparation_instructions":"Koel serveren en voor gebruik schudden.",
                     "expiry_date":"2026-09-30","placed_by":"Kevin"}, path)
                 data=path.read_bytes()
                 self.assertTrue(data.startswith(b"%PDF"))

@@ -21,7 +21,7 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.7.0"
 USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
@@ -247,6 +247,7 @@ def init_db():
           category TEXT NOT NULL DEFAULT '',barcode TEXT NOT NULL DEFAULT '',
           expiry_date TEXT,notes TEXT NOT NULL DEFAULT '',short_code TEXT,
           product_type TEXT NOT NULL DEFAULT 'store',contents TEXT NOT NULL DEFAULT '',
+          preparation_instructions TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS shopping_items(
@@ -338,6 +339,7 @@ def init_db():
             "default_shelf_days INTEGER", "opened_shelf_days INTEGER",
             "short_code TEXT", "product_type TEXT NOT NULL DEFAULT 'store'",
             "contents TEXT NOT NULL DEFAULT ''",
+            "preparation_instructions TEXT NOT NULL DEFAULT ''",
         ]:
             add_column(c, "products", definition)
         add_column(c,"stock_lots","production_date TEXT")
@@ -419,6 +421,42 @@ def estimate_gemini(c, name, category, location_name, opened=False):
     except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
             ValueError, json.JSONDecodeError) as error:
         raise RuntimeError(f"Gemini kon geen inschatting maken: {error}") from error
+
+
+def generate_preparation_gemini(c, name, contents):
+    api_key = setting(c, "gemini_api_key")
+    if not api_key:
+        raise RuntimeError("Configureer eerst je Gemini API-key bij Instellingen")
+    model = setting(c, "gemini_model", "gemini-3.1-flash-lite")
+    prompt = (
+        "Schrijf één ultrakorte Nederlandse bereidings- of opwarminstructie voor "
+        "een klein voedselbewaarlabel. Baseer die op zowel de naam als de opgegeven "
+        "ingrediënten. Wees conservatief en voedselveilig, verzin geen ontbrekende "
+        "apparaatstanden en gebruik maximaal 180 tekens. Als betrouwbare instructies "
+        "niet af te leiden zijn, zeg dan: Volg de bereidingswijze op de verpakking. "
+        f"Naam gerecht of product: {name}. Ingrediënten: {contents}."
+    )
+    schema = {"type":"object","properties":{"instructions":{"type":"string"}},
+              "required":["instructions"]}
+    payload = {"contents":[{"parts":[{"text":prompt}]}],
+               "generationConfig":{"responseMimeType":"application/json",
+               "responseJsonSchema":schema,"maxOutputTokens":160}}
+    req = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(model)}:generateContent",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type":"application/json","x-goog-api-key":api_key,
+                 "User-Agent":USER_AGENT}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=18) as response:
+            raw = json.load(response)
+        instruction = str(json.loads(raw["candidates"][0]["content"]["parts"][0]["text"])
+                          ["instructions"]).replace("\n", " ").strip()
+        if not instruction:
+            raise ValueError("lege bereidingswijze")
+        return instruction[:220]
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
+            ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Gemini kon geen bereidingswijze maken: {error}") from error
 
 
 def open_food_facts(barcode):
@@ -554,13 +592,14 @@ def create_product():
         short_code=article_code(c,name)
         pid=c.execute("""INSERT INTO products
           (name,unit,minimum,category,barcode,notes,brand,image_url,
-           default_shelf_days,opened_shelf_days,short_code,product_type,contents)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           default_shelf_days,opened_shelf_days,short_code,product_type,contents,
+           preparation_instructions) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
           (name,str(p.get("unit") or "stuks"),number(p.get("minimum"),0,0),
            str(p.get("category") or ""),barcode,str(p.get("notes") or ""),
            str(p.get("brand") or ""),str(p.get("image_url") or ""),
            p.get("default_shelf_days") or None,p.get("opened_shelf_days") or None,
-           short_code,product_type,str(p.get("contents") or ""))).lastrowid
+           short_code,product_type,str(p.get("contents") or ""),
+           str(p.get("preparation_instructions") or "")[:220])).lastrowid
         if barcode:c.execute("INSERT INTO barcodes(product_id,barcode) VALUES(?,?)",(pid,barcode))
         lot_ids=[];lot_codes=[];job_ids=[]
         if quantity>0:
@@ -593,9 +632,11 @@ def create_product():
 def update_product(product_id):
     p=body(); allowed=["name","unit","minimum","category","notes","brand",
                       "image_url","default_shelf_days","opened_shelf_days",
-                      "product_type","contents"]
+                      "product_type","contents","preparation_instructions"]
     fields={k:p[k] for k in allowed if k in p}
     if not fields:return jsonify(error="Geen wijzigingen"),400
+    if "preparation_instructions" in fields:
+        fields["preparation_instructions"]=str(fields["preparation_instructions"] or "")[:220]
     if "product_type" in fields and fields["product_type"] not in {"store","homemade"}:
         return jsonify(error="Ongeldig producttype"),400
     with db() as c:
@@ -743,6 +784,17 @@ def expiry_estimate():
         result["expiry_date"]=(date.today()+timedelta(days=int(result["days"]))).isoformat()
         result["location"]=loc["name"]
     return jsonify(result)
+
+
+@app.post("/api/preparation-instructions")
+def preparation_instructions():
+    p=body();name=str(p.get("name") or "").strip();contents=str(p.get("contents") or "").strip()
+    if not name:return jsonify(error="Vul eerst de naam van het gerecht of product in"),400
+    if not contents:return jsonify(error="Vul eerst de inhoud of ingrediënten in"),400
+    try:
+        with db() as c:instruction=generate_preparation_gemini(c,name,contents)
+    except RuntimeError as error:return jsonify(error=str(error)),502
+    return jsonify(instructions=instruction,source="gemini")
 
 
 @app.post("/api/shelf-rules")
@@ -908,7 +960,7 @@ def delete_shopping(item_id):
 def labels():
     with db() as c:
         rows=[dict(r) for r in c.execute("""SELECT j.*,p.name,p.brand,p.category,p.unit,
-          p.short_code,p.product_type,p.contents,l.quantity,l.purchase_date,
+          p.short_code,p.product_type,p.contents,p.preparation_instructions,l.quantity,l.purchase_date,
           l.production_date,l.expiry_date,l.lot_code,loc.name location,
           pr.name placed_by
           FROM label_jobs j JOIN products p ON p.id=j.product_id
@@ -946,7 +998,7 @@ def update_label(job_id):
 
 def label_for_print(c, job_id):
     return c.execute("""SELECT j.*,p.name,p.brand,p.category,p.unit,p.short_code,p.product_type,
-      p.contents,l.quantity,l.purchase_date,l.production_date,l.expiry_date,
+      p.contents,p.preparation_instructions,l.quantity,l.purchase_date,l.production_date,l.expiry_date,
       l.lot_code,loc.name location,pr.name placed_by FROM label_jobs j
       JOIN products p ON p.id=j.product_id
       LEFT JOIN stock_lots l ON l.id=j.lot_id
@@ -983,7 +1035,8 @@ def print_server_label(job_id):
         detail=f"{number(job['quantity']):g} {job['unit']}"
         payload={"printer":printer,"name":job["name"],"detail":detail,
           "short_code":job["short_code"],"lot_code":job["lot_code"],"product_type":job["product_type"],
-          "contents":job["contents"],"brand":job["brand"],"category":job["category"],
+          "contents":job["contents"],"preparation_instructions":job["preparation_instructions"],
+          "brand":job["brand"],"category":job["category"],
           "location":job["location"],
           "production_date":job["production_date"],"purchase_date":job["purchase_date"],
           "expiry_date":job["expiry_date"],"placed_by":job["placed_by"],

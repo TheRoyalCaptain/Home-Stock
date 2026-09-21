@@ -109,11 +109,14 @@ def label_pdf(data, path):
         canvas.setFillColorRGB(0,0,0)
         wrapped(canvas,name,margin,height-margin-32,width-2*margin,"Helvetica-Bold",11,2,12)
         canvas.setFont("Helvetica-Bold",22);canvas.drawCentredString(width/2,height-margin-76,safe_text(data.get("lot_code") or data.get("short_code"),12))
-        barcode=code128.Code128(value,barHeight=10*mm,barWidth=.22*mm,humanReadable=False)
-        scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,height-margin-112);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
-        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,height-margin-122,"INHOUD / INGREDIËNTEN")
-        wrapped(canvas,data.get("contents") or name,margin,height-margin-132,width-2*margin,"Helvetica",7,3,8)
-        box_y=31*mm;box_h=12*mm;gap=1.5*mm;box_w=(width-2*margin-gap)/2
+        barcode=code128.Code128(value,barHeight=8*mm,barWidth=.22*mm,humanReadable=False)
+        scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,height-margin-106);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
+        canvas.setFont("Helvetica-Bold",5.2);canvas.drawString(margin,height-margin-116,"INHOUD / INGREDIËNTEN")
+        wrapped(canvas,data.get("contents") or name,margin,height-margin-125,width-2*margin,"Helvetica",6.3,2,7)
+        canvas.line(margin,height-margin-137,width-margin,height-margin-137)
+        canvas.setFont("Helvetica-Bold",5.2);canvas.drawString(margin,height-margin-144,"BEREIDINGSWIJZE")
+        wrapped(canvas,data.get("preparation_instructions") or "Niet ingesteld",margin,height-margin-152,width-2*margin,"Helvetica",5.5,3,6)
+        box_y=27*mm;box_h=12*mm;gap=1.5*mm;box_w=(width-2*margin-gap)/2
         production=data.get("production_date") or data.get("purchase_date")
         production_title=("BEREID" if data.get("product_type")=="homemade" else "GEPRODUCEERD") if data.get("production_date") else "INGELEGD"
         for x,title,value_date in ((margin,production_title,production),(margin+box_w+gap,"EINDDATUM",data.get("expiry_date"))):

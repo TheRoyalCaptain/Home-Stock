@@ -1,10 +1,11 @@
 """Run with python -m unittest discover -s tests."""
 import io
+import json
 import os
 import re
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from barcode import Code128
 from barcode.writer import ImageWriter
@@ -34,6 +35,22 @@ class AuthenticationTest(unittest.TestCase):
         Code128("VP001-A", writer=ImageWriter()).write(image)
         decoded = app_module.decode_barcode_image(image.getvalue())
         self.assertEqual(decoded[0]["text"], "VP001-A")
+
+    def test_gemini_preparation_uses_name_and_ingredients(self):
+        raw = {"candidates":[{"content":{"parts":[{"text":json.dumps({
+            "instructions":"Verwarm rustig en roer halverwege door."})}]}}]}
+        response = MagicMock()
+        response.__enter__.return_value = io.BytesIO(json.dumps(raw).encode())
+        with db() as c:
+            c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('gemini_api_key','test-key')")
+            with patch.object(app_module.urllib.request, "urlopen", return_value=response) as opened:
+                result = app_module.generate_preparation_gemini(
+                    c, "Vegetarische pasta", "pasta, tomaat en kaas")
+            c.execute("DELETE FROM settings WHERE key='gemini_api_key'")
+        self.assertEqual(result, "Verwarm rustig en roer halverwege door.")
+        prompt = json.loads(opened.call_args.args[0].data)["contents"][0]["parts"][0]["text"]
+        self.assertIn("Vegetarische pasta", prompt)
+        self.assertIn("pasta, tomaat en kaas", prompt)
 
     def test_complete_security_flow(self):
         anon = app.test_client()
@@ -117,6 +134,7 @@ class AuthenticationTest(unittest.TestCase):
             created = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
                 "name":"Printproduct","quantity":1,"location_id":1,"create_label":True,
                 "product_type":"homemade","contents":"Pasta en groente",
+                "preparation_instructions":"Verwarm 4 minuten en roer halverwege door.",
                 "production_date":"2026-09-21","expiry_date":"2026-09-28"}).json
             self.assertRegex(created["short_code"], r"^PR\d{3}$")
             self.assertEqual(client.get("/api/barcode/"+created["short_code"]).json["product"]["id"], created["id"])
@@ -128,6 +146,7 @@ class AuthenticationTest(unittest.TestCase):
             self.assertEqual(payload["short_code"], created["short_code"])
             self.assertEqual(payload["lot_code"], created["lot_code"])
             self.assertEqual(payload["contents"], "Pasta en groente")
+            self.assertEqual(payload["preparation_instructions"], "Verwarm 4 minuten en roer halverwege door.")
             self.assertEqual(payload["production_date"], "2026-09-21")
             self.assertEqual(payload["placed_by"], "Kevin")
             self.assertEqual(payload["copies"], 1)
@@ -163,6 +182,13 @@ class AuthenticationTest(unittest.TestCase):
                     "unit":"bak","location_id":2,"create_labels":True}).json
             self.assertEqual(extra["lot_codes"], [f"{batch['short_code']}-D", f"{batch['short_code']}-E"])
             self.assertEqual(len(extra["label_job_ids"]), 2)
+
+            with patch.object(app_module, "generate_preparation_gemini",
+                              return_value="Verwarm goed en schep halverwege om."):
+                prepared = client.post("/api/preparation-instructions", headers={
+                    "X-CSRF-Token":csrf}, json={"name":"Pasta","contents":"tomaat en kaas"})
+            self.assertEqual(prepared.status_code, 200)
+            self.assertEqual(prepared.json["instructions"], "Verwarm goed en schep halverwege om.")
 
             with patch.object(app_module, "decode_barcode_image",
                               return_value=[{"text":batch["lot_codes"][1],"format":"Code128"}]):

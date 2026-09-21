@@ -22,6 +22,7 @@ een DYMO LabelWriter.
 - Houdbaarheids- en minimumvoorraadmeldingen
 - CSV-export en JSON-back-up
 - Direct printen op een USB-aangesloten DYMO LabelWriter 400/450
+- Door Gemini gemaakte, handmatig aanpasbare bereidingswijze op het label
 - Installeerbare iPhone-webapp
 
 ## Installeren op Umbrel
@@ -85,6 +86,7 @@ toont onder andere:
 - Productnaam en unieke bakcode
 - Scanbare barcode
 - Inhoud of ingrediënten
+- Korte bereidings- of opwarminstructie op basis van naam én ingrediënten
 - Productie- of bereidingsdatum
 - Einddatum en hoeveelheid
 - Wie het product heeft ingelegd
@@ -112,6 +114,14 @@ is. Stel bij TLS via een reverse proxy `HOME_STOCK_SECURE_COOKIE=1` in voor de
 webcontainer.
 
 ## Versiegeschiedenis
+
+### v0.7.0
+
+- Gemini maakt een korte bereidings- of opwarminstructie op basis van zowel de
+  productnaam als de ingrediënten
+- De tekst is vóór en na het opslaan handmatig aanpasbaar
+- Nieuw blok **Bereidingswijze** in het schermvoorbeeld en op de DYMO 99014
+- De bereidingswijze wordt bij het product bewaard en op ieder baklabel hergebruikt
 
 ### v0.6.1
 

@@ -85,7 +85,7 @@
 
   <section class="page" id="page-settings">
     <div class="settings-grid">
-      <article class="panel"><h2>Gemini Free Tier</h2><p>Alleen gebruikt als lokale houdbaarheidsregels geen goede match vinden.</p>
+      <article class="panel"><h2>Gemini Free Tier</h2><p>Gebruikt voor houdbaarheidsinschattingen en korte bereidingswijzen op labels.</p>
         <form id="ai-form" class="stack"><label>Gemini API-key<input name="gemini_api_key" type="password" placeholder="Bestaande key wordt niet getoond"></label>
           <label>Model<input name="gemini_model" value="gemini-3.1-flash-lite"></label><button class="primary">Opslaan</button></form></article>
       <article class="panel"><h2>Locaties</h2><div id="locations-list" class="list"></div>
@@ -122,6 +122,8 @@
     <label>Ingelegd of gekocht op<input name="purchase_date" type="date"></label><label><span id="production-date-label">Bereid op</span><input name="production_date" type="date"></label>
     <label>Houdbaar tot / einddatum<input name="expiry_date" type="date"></label>
   </div>
+  <label>Bereidingswijze voor op het label<textarea name="preparation_instructions" rows="2" maxlength="220" placeholder="Bijvoorbeeld: 4–5 min. verwarmen in de magnetron en halverwege omscheppen"></textarea></label>
+  <div class="estimate-box"><button type="button" class="secondary" id="generate-preparation">✨ Bereidingswijze met Gemini maken</button><span id="preparation-result">Gebruikt de naam én ingrediënten; je kunt de tekst daarna aanpassen.</span></div>
   <div class="estimate-box"><button type="button" class="secondary" id="estimate-expiry">✨ Houdbaarheid bepalen</button><span id="estimate-result">Lokale regels worden eerst gebruikt.</span></div>
   <label class="checkline"><input name="remember_shelf" type="checkbox"> Deze aangepaste houdbaarheid onthouden voor dit product en deze locatie</label>
   <hr><div class="label-choice"><label class="checkline"><input name="create_label" type="checkbox" checked> Voor iedere bak een eigen label maken</label><label>Exemplaren per bak<input name="label_copies" type="number" min="1" max="99" value="1"></label></div>
@@ -137,6 +139,7 @@
     <strong id="label-name"></strong><div class="label-code" id="label-code"></div>
     <img id="label-barcode" alt="Barcode">
     <div class="label-contents"><small>INHOUD</small><span id="label-contents"></span></div>
+    <div class="label-preparation"><small>BEREIDINGSWIJZE</small><span id="label-preparation"></span></div>
     <div class="label-dates"><div><small id="label-production-title">BEREID</small><b id="label-production"></b></div><div><small>EINDDATUM</small><b id="label-expiry"></b></div></div>
     <div class="label-meta"><span id="label-owner"></span><span id="label-quantity"></span></div>
     <small id="label-footer"></small>
