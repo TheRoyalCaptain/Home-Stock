@@ -1,136 +1,181 @@
 # Home Stock
 
-Home Stock is a self-hosted household inventory and expiry tracker for umbrelOS. It combines the simple fridge overview of Fridge Assistant with practical Grocy-style stock features and printable DYMO labels.
+Home Stock is een zelfgehoste voorraad- en houdbaarheidsapp voor thuis. Beheer
+producten en losse bakken in je koelkast, vriezer, voorraadkast of eigen
+locaties, scan barcodes met je iPhone en print bewaaretiketten rechtstreeks op
+een DYMO LabelWriter.
 
-## iPhone web app and camera scanner (v0.6.0)
+## Belangrijkste functies
 
-Home Stock is installable from Safari with **Share → Add to Home Screen** and
-runs in a standalone, iOS-safe layout with an app icon, safe-area support and a
-touch-friendly bottom navigation bar. Authentication remains required in the
-installed web app.
+- Losse voorraadpartijen met hoeveelheid, locatie, productie- en einddatum
+- Vaste locaties: **Koelkast**, **Vriezer** en **Voorraadkast**
+- Zelf eigen locaties toevoegen
+- Meerdere bakken in één keer invoeren met codes als `VP001-A` en `VP001-B`
+- Iedere bak afzonderlijk verbruiken, verspillen, openen of verplaatsen
+- Winkelbarcodes opzoeken via Open Food Facts
+- Home Stock-codes, EAN, UPC, Code 128 en QR scannen
+- Automatische, handmatig aanpasbare houdbaarheidsinschatting
+- Optionele Gemini Free Tier-inschatting als lokale regels niet voldoen
+- Verbruik, verspilling, prijzen, winkels en statistieken
+- Boodschappenlijst, recepten en maaltijdplanner
+- Meerdere gebruikers met activiteitshistorie
+- Houdbaarheids- en minimumvoorraadmeldingen
+- CSV-export en JSON-back-up
+- Direct printen op een USB-aangesloten DYMO LabelWriter 400/450
+- Installeerbare iPhone-webapp
 
-The scanner uses the iPhone's rear camera for EAN, UPC, Code 128, QR and Home
-Stock container codes. Because iOS does not reliably expose the browser barcode
-API, camera frames are decoded locally by the Home Stock server with ZXing. No
-camera image is sent to a cloud service or stored. Live camera access requires
-HTTPS. A **Foto scannen** option uses the iPhone camera as a secure fallback when
-the app is reached over plain local HTTP.
+## Installeren op Umbrel
 
-## Multiple containers (v0.5.0)
+1. Open in de Umbrel App Store het menu voor **Community App Stores**.
+2. Voeg `https://github.com/TheRoyalCaptain/Home-Stock` toe.
+3. Open de nieuwe sectie **Home Stock App Store**.
+4. Installeer **Home Stock**.
 
-A single cooking session or purchase can now be stored as up to 99 separate
-containers in one action. Enter the quantity per container and Home Stock creates
-an independent stock lot for every box or package. A product such as `VP001`
-receives container codes `VP001-A`, `VP001-B`, `VP001-C`, and so on. Each code has
-its own scannable barcode, expiry tracking, label and consume/waste action, so one
-container can be used without changing the others. Additional containers continue
-the sequence automatically. The confirmation screen can send every generated
-label to the server-connected DYMO in one operation.
+De images worden automatisch gebouwd voor AMD64 en ARM64. De app gebruikt geen
+extra Umbrel-authenticatiescherm. Home Stock opent rechtstreeks zijn eigen
+beveiligde inlogpagina.
 
-## Vertical food labels (v0.4.0)
+## Eerste login
 
-DYMO 99014 labels now print in portrait at 54 × 101 mm. The food-storage layout
-shows the storage location, homemade/store type, product name, permanent
-five-character article code, scannable lot barcode, contents or ingredients,
-production/preparation date, expiry date, quantity, the person who stored it,
-brand/category and lot number.
+- Gebruikersnaam: `admin`
+- Wachtwoord: `admin`
 
-Every product receives a permanent code made from two letters and three digits,
-such as `VP001` for Vegetarische pasta. Products sharing the same initials are
-numbered consecutively. Existing products receive codes automatically during the
-database migration. The short code identifies the product; the barcode and lot
-number continue to identify the individual container or batch.
+Bij de eerste login moet het standaardwachtwoord direct worden vervangen door
+een uniek wachtwoord van minimaal 12 tekens. Daarna kan een beheerder via
+**Gebruikers beheren** extra accounts aanmaken.
 
-The product form distinguishes **Zelfgemaakt / bak eten** from **Winkelproduct**.
-It includes contents/ingredients and a production or preparation date. Store
-products can leave that date empty; the label then shows the date on which the
-item was stored. The existing retail barcode and brand fields remain available.
+## iPhone-webapp en barcodes scannen
 
-## Login and users (v0.2.2)
+Installeer Home Stock op een iPhone via:
 
-Every inventory page and API endpoint requires login. First login: username
-`admin`, password `admin`. You must replace this password before accessing data.
-New passwords must contain 12–256 characters. Change the default immediately
-on your trusted local network before exposing the application elsewhere.
+1. Open Home Stock in Safari.
+2. Tik op de deelknop.
+3. Kies **Zet op beginscherm**.
+4. Open Home Stock voortaan via het appicoon.
 
-Administrators can create accounts under **Gebruikers beheren**, assigning a
-user or administrator role. Every new account must replace its temporary password.
-Both roles share the household inventory. Profiles used for activity records
-are linked to login accounts and cannot be impersonated through API parameters.
-Only administrators can create users and change system settings.
+Voor continu live scannen is HTTPS en cameratoestemming nodig. Via een lokaal
+HTTP-adres blijft **Foto scannen** beschikbaar. Cameraframes worden lokaal door
+de Home Stock-server met ZXing verwerkt, niet naar een clouddienst gestuurd en
+niet opgeslagen.
 
-Passwords use salted scrypt hashes. Opaque server-side sessions expire after
-12 hours and are revoked on logout or password changes. Write requests require
-CSRF tokens. Five login attempts per 15 minutes are allowed per username and
-source address. Behind Umbrel's proxy the address limit may be shared.
-Application exports exclude authentication tables and session secrets.
+## Meerdere bakken tegelijk invoeren
 
-Use HTTPS for encrypted access, especially outside your local network.
-For TLS terminated at a reverse proxy, set `HOME_STOCK_SECURE_COOKIE=1` on the
-web container. Plain HTTP remains supported for local Umbrel installations,
-but cannot protect passwords or session cookies against network interception.
-The application does not configure TLS or certificates on your server.
+Vul bij een gerecht het aantal bakken en de hoeveelheid per bak in. Home Stock
+maakt voor iedere bak een eigen voorraadpartij, barcode en optioneel label. Een
+artikel met code `VP001` krijgt bijvoorbeeld:
 
-Run authentication regression checks with `python -m unittest discover -s tests`.
+- `VP001-A`
+- `VP001-B`
+- `VP001-C`
 
-## Direct USB printing (v0.3.0)
+Extra bakken lopen automatisch door met `-D`, `-E` enzovoort. Iedere bak kan
+afzonderlijk worden verbruikt zonder de voorraad van de andere bakken te wijzigen.
 
-The Umbrel app includes an internal CUPS service for a USB-connected DYMO
-LabelWriter 400 or 450. It discovers the printer automatically, installs the
-matching open-source DYMO CUPS queue, and prints the PDF label directly from the
-server. The printer service is reachable only by the Home Stock web container;
-it does not expose a CUPS port on the host or local network. Only the printer
-sidecar receives access to `/dev/bus/usb`, using the USB character-device cgroup
-rule instead of privileged container mode.
+## DYMO-labels
 
-After updating, keep the printer connected and powered on. Open **Instellingen →
-Labels en meldingen**, select **Direct via USB-printer op de server**, choose the
-detected printer (or automatic selection), save, and use **Testlabel direct
-printen**. Label confirmation then uses direct server printing by default.
-Browser printing remains available from the label preview.
+De Umbrel-app bevat een afgeschermde CUPS-printerservice voor een via USB
+aangesloten DYMO LabelWriter 400 of 450. Alleen deze interne printercontainer
+krijgt toegang tot `/dev/bus/usb`; de CUPS-poort wordt niet op het netwerk
+gepubliceerd.
 
-Supported here: the DYMO LabelWriter 400 and 450 families using CUPS' DYMO
-driver. The newer 5-series protocol is not part of this integration.
+De standaard DYMO 99014-indeling gebruikt het label verticaal op 54 × 101 mm en
+toont onder andere:
 
-## Features in v0.2.0
+- Locatie en producttype
+- Productnaam en unieke bakcode
+- Scanbare barcode
+- Inhoud of ingrediënten
+- Productie- of bereidingsdatum
+- Einddatum en hoeveelheid
+- Wie het product heeft ingelegd
 
-- Normalized SQLite database with automatic v0.1 migration
-- Separate stock lots with FIFO ordering, prices, stores and expiry dates
-- Fixed Koelkast, Vriezer and Voorraadkast locations plus custom locations
-- Retail barcode lookup through Open Food Facts and local HS lot barcodes
-- Automatic editable shelf-life estimates from local rules and optional Gemini Free Tier
-- Consumption, waste, spending and store statistics
-- Household profiles and complete activity history
-- Low-stock and expiration notification center
-- Automatic and manual shopping lists
-- Recipes, ingredient stock matching and meal planning
-- DYMO label confirmation, queue, direct USB printing and browser printing
-  (57 × 32 or 101 × 54 mm)
-- CSV export, full JSON backup and responsive Dutch interface
+Ga na installatie naar **Instellingen → Labels en meldingen**, kies de gevonden
+DYMO als standaardprinter en gebruik **Testlabel direct printen**. Browserprinten
+blijft beschikbaar als reserveoptie. De DYMO 5-serie wordt niet ondersteund.
 
-## Install on Umbrel
+## Beveiliging
 
-1. In the Umbrel App Store, open the menu for Community App Stores.
-2. Add `https://github.com/TheRoyalCaptain/Home-Stock`.
-3. Open **Home Stock** in the new **Home Stock App Store** section and install it.
+Umbrels extra proxy-login is uitgeschakeld om een dubbele login te voorkomen.
+De eigen beveiliging van Home Stock blijft volledig actief:
 
-The Docker image is built automatically by GitHub Actions for AMD64 and ARM64. After the first push, wait for the `Build container image` workflow to finish before installing.
+- Alle voorraadpagina's en API-routes vereisen een Home Stock-account
+- Wachtwoorden worden opgeslagen als salted scrypt-hashes
+- Server-side sessies verlopen na 12 uur
+- Sessies worden ingetrokken na uitloggen of een wachtwoordwijziging
+- Schrijfacties zijn beschermd met CSRF-tokens
+- Inlogpogingen worden begrensd
+- Gebruikers kunnen elkaars profiel niet via API-parameters overnemen
+- Alleen beheerders kunnen gebruikers en systeeminstellingen aanpassen
 
-## Local development
+Gebruik HTTPS wanneer Home Stock buiten het vertrouwde lokale netwerk bereikbaar
+is. Stel bij TLS via een reverse proxy `HOME_STOCK_SECURE_COOKIE=1` in voor de
+webcontainer.
+
+## Versiegeschiedenis
+
+### v0.6.1
+
+- Umbrel-proxylogin uitgeschakeld; alleen de eigen Home Stock-login is nodig
+- README volledig opnieuw ingedeeld en versiegeschiedenis gecorrigeerd
+- Standaard Home Stock-inloggegevens zichtbaar gemaakt in Umbrel
+
+### v0.6.0
+
+- Installeerbare iPhone-webapp met Apple-appicoon en mobiele navigatie
+- Live iPhone-camerascanner en foto-scanfunctie
+- Lokale ZXing-herkenning voor EAN, UPC, Code 128, QR en Home Stock-codes
+
+### v0.5.0
+
+- Meerdere bakken of verpakkingen in één keer invoeren
+- Individuele achtervoegsels zoals `VP001-A`, `VP001-B` en `VP001-C`
+- Iedere bak apart verbruiken en alle bijbehorende labels samen printen
+
+### v0.4.0
+
+- Verticaal DYMO 99014-bewaaretiket
+- Vaste artikelcodes van twee letters en drie cijfers
+- Inhoud, locatie, productie-/bereidingsdatum en inlegger op het label
+- Aparte formulieren voor zelfgemaakt eten en winkelproducten
+
+### v0.3.0
+
+- Automatische USB-detectie voor DYMO LabelWriter 400/450
+- Ingebouwde, afgeschermde CUPS-printerservice
+- Direct printen, standaardprinter en testlabel
+
+### v0.2.2
+
+- Verplichte eigen login en wachtwoordwijziging bij eerste gebruik
+- Gebruikersbeheer, beheerdersrechten en beveiligde sessies
+
+### v0.2.1
+
+- Browserpop-ups vervangen door formulieren, dropdowns en eigen invoervelden
+
+### v0.2.0
+
+- SQLite-database en automatische migratie
+- Voorraadpartijen, vaste en eigen locaties
+- Open Food Facts en Gemini-houdbaarheidsinschatting
+- Prijzen, statistieken, profielen, geschiedenis en meldingen
+- Recepten, maaltijdplanning, boodschappen en labelwachtrij
+
+## Lokale ontwikkeling
 
 ```bash
 docker build -t home-stock .
 docker run --rm -p 8080:8080 -v home-stock-data:/data home-stock
 ```
 
-Then open <http://localhost:8080>.
+Open daarna <http://localhost:8080>.
 
-## Printer note
+Tests uitvoeren:
 
-When using browser printing, select the DYMO LabelWriter and set paper size to
-57 × 32 mm with margins disabled. Direct USB printing is the default in the
-Umbrel app and requires no separate CUPS configuration.
+```bash
+python -m unittest discover -s tests
+```
 
-## License
+## Licentie
 
 MIT

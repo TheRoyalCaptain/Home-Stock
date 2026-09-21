@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.6.0"
+version: "0.6.1"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,9 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.6.1 schakelt de extra Umbrel-proxylogin uit. Home Stock opent daardoor
+  rechtstreeks zijn eigen beveiligde loginpagina. De README is opnieuw
+  ingedeeld en de standaard inloggegevens worden nu in Umbrel getoond.
   v0.6.0 maakt Home Stock installeerbaar als iPhone-webapp met Apple-appicoon,
   standalone weergave, mobiele navigatie en een iOS-geschikte camerascanner.
   Barcodes worden volledig lokaal op de Home Stock-server herkend; via HTTP is
@@ -51,8 +54,8 @@ gallery: []
 path: ""
 icon: https://raw.githubusercontent.com/TheRoyalCaptain/Home-Stock/main/home-stock/icon.svg
 
-defaultUsername: ""
-defaultPassword: ""
+defaultUsername: "admin"
+defaultPassword: "admin"
 
 submitter: Kevin van Krugten
 submission: https://github.com/TheRoyalCaptain/Home-Stock
