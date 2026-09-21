@@ -21,7 +21,7 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.6.0"
 USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
@@ -113,6 +113,23 @@ def setting(connection, key, default=""):
 
 def body():
     return request.get_json(silent=True) or {}
+
+
+def decode_barcode_image(image_bytes):
+    """Decode retail and Home Stock barcodes without an external service."""
+    from PIL import Image
+    import zxingcpp
+    image = Image.open(io.BytesIO(image_bytes))
+    image.thumbnail((1600, 1600))
+    results = zxingcpp.read_barcodes(image)
+    seen = set()
+    decoded = []
+    for result in results:
+        value = str(result.text or "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            decoded.append({"text": value, "format": str(result.format)})
+    return decoded
 
 
 def print_service(path, payload=None):
@@ -459,6 +476,14 @@ def index():
     return render_template("index.html", version=APP_VERSION)
 
 
+@app.get("/service-worker.js")
+def service_worker():
+    response = app.send_static_file("service-worker.js")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/health")
 def health():
     return jsonify(status="ok", version=APP_VERSION)
@@ -679,6 +704,19 @@ def barcode_lookup(barcode):
     try:result=open_food_facts(barcode)
     except RuntimeError as error:return jsonify(found=False,error=str(error)),502
     return jsonify(found=bool(result),local=False,product=result)
+
+
+@app.post("/api/barcode/decode")
+def barcode_decode():
+    if request.mimetype not in {"image/jpeg", "image/png", "image/webp"}:
+        return jsonify(error="Stuur een JPEG-, PNG- of WebP-afbeelding"),415
+    if not request.data:
+        return jsonify(error="Geen camerabeeld ontvangen"),400
+    try:
+        codes = decode_barcode_image(request.data)
+    except Exception:
+        return jsonify(error="Het camerabeeld kon niet worden gelezen"),400
+    return jsonify(found=bool(codes), codes=codes)
 
 
 @app.post("/api/expiry-estimate")

@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.5.0"
+version: "0.6.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,10 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.6.0 maakt Home Stock installeerbaar als iPhone-webapp met Apple-appicoon,
+  standalone weergave, mobiele navigatie en een iOS-geschikte camerascanner.
+  Barcodes worden volledig lokaal op de Home Stock-server herkend; via HTTP is
+  Foto scannen beschikbaar en via HTTPS werkt ook continu live scannen.
   v0.5.0 voegt meerdere bakken of verpakkingen tegelijk toe als losse
   voorraadpartijen. Iedere bak krijgt een eigen code en barcode, zoals VP001-A,
   VP001-B en VP001-C, kan individueel worden verbruikt en krijgt desgewenst een

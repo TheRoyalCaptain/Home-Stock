@@ -1,9 +1,13 @@
 """Run with python -m unittest discover -s tests."""
+import io
 import os
 import re
 import tempfile
 import unittest
 from unittest.mock import patch
+
+from barcode import Code128
+from barcode.writer import ImageWriter
 
 test_data = tempfile.TemporaryDirectory()
 os.environ["HOME_STOCK_DATA_DIR"] = test_data.name
@@ -25,8 +29,21 @@ class AuthenticationTest(unittest.TestCase):
             csrf_token=self.token(client, "/account/password"),
             current_password=current, password=password, password_confirm=password))
 
+    def test_server_barcode_decoder(self):
+        image = io.BytesIO()
+        Code128("VP001-A", writer=ImageWriter()).write(image)
+        decoded = app_module.decode_barcode_image(image.getvalue())
+        self.assertEqual(decoded[0]["text"], "VP001-A")
+
     def test_complete_security_flow(self):
         anon = app.test_client()
+        manifest = anon.get("/static/manifest.webmanifest")
+        self.assertEqual(manifest.status_code, 200)
+        manifest.close()
+        service_worker = anon.get("/service-worker.js")
+        self.assertEqual(service_worker.status_code, 200)
+        self.assertEqual(service_worker.headers["Service-Worker-Allowed"], "/")
+        service_worker.close()
         # Every API rule is denied before its handler, including exports/images.
         for rule in app.url_map.iter_rules():
             if rule.rule.startswith("/api/"):
@@ -146,6 +163,15 @@ class AuthenticationTest(unittest.TestCase):
                     "unit":"bak","location_id":2,"create_labels":True}).json
             self.assertEqual(extra["lot_codes"], [f"{batch['short_code']}-D", f"{batch['short_code']}-E"])
             self.assertEqual(len(extra["label_job_ids"]), 2)
+
+            with patch.object(app_module, "decode_barcode_image",
+                              return_value=[{"text":batch["lot_codes"][1],"format":"Code128"}]):
+                decoded = client.post("/api/barcode/decode", headers={
+                    "X-CSRF-Token":csrf,"Content-Type":"image/jpeg"}, data=b"camera frame")
+            self.assertEqual(decoded.status_code, 200)
+            self.assertEqual(decoded.json["codes"][0]["text"], batch["lot_codes"][1])
+            self.assertEqual(client.post("/api/barcode/decode", headers={
+                "X-CSRF-Token":csrf,"Content-Type":"text/plain"}, data=b"x").status_code, 415)
 
 
 if __name__ == "__main__":

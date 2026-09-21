@@ -1,11 +1,15 @@
 <!doctype html>
 <html lang="nl">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <meta name="auth-profile" content="{{ auth_profile_id }}">
-  <meta name="theme-color" content="#10251f"><title>Home Stock</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <meta name="theme-color" content="#10251f"><meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Home Stock"><meta name="format-detection" content="telephone=no">
+  <title>Home Stock</title><link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/styles.css?v={{ version }}">
 </head>
 <body>
 <aside class="sidebar">
@@ -97,6 +101,8 @@
         <button type="button" class="secondary" id="printer-test">Testlabel direct printen</button>
         <label>Waarschuwen vóór houdbaarheid<input name="expiry_warning_days" type="number" min="1" value="7"></label><button class="primary">Opslaan</button></form></article>
       <article class="panel"><h2>Gegevens</h2><div class="button-row"><a class="secondary" href="/api/export.csv">CSV-export</a><a class="secondary" href="/api/backup.json">JSON-back-up</a></div></article>
+      <article class="panel"><h2>iPhone-webapp</h2><p id="install-status">Open Home Stock in Safari en zet de app op je beginscherm.</p><button class="secondary" id="install-app">Installatie-uitleg</button></article>
+      <article class="panel"><h2>Account</h2><p>Ingelogd als <b>{{ auth_username }}</b>.</p><div class="button-row"><a class="secondary" href="/account/password">Wachtwoord wijzigen</a>{% if auth_role == 'admin' %}<a class="secondary" href="/account/users">Gebruikers</a>{% endif %}<form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary">Uitloggen</button></form></div></article>
     </div>
   </section>
 </main>
@@ -147,9 +153,11 @@
   <label>Recept<select name="recipe_id" id="plan-recipe" required></select></label><label>Porties<input name="servings" type="number" value="2" min="1"></label>
   <div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Plannen</button></div></form></dialog>
 
-<dialog id="scan-dialog"><div class="modal"><div class="modal-head"><div><h2>Barcode scannen</h2><p>Camera werkt via HTTPS; handmatig invoeren kan altijd.</p></div><button class="close" data-close>×</button></div>
-  <video id="scan-video" autoplay playsinline></video><div class="barcode-row"><input id="scan-manual" inputmode="numeric" placeholder="Of typ de barcode"><button class="primary" id="scan-use">Gebruiken</button></div><p id="scan-state"></p></div></dialog>
+<dialog id="scan-dialog"><div class="modal"><div class="modal-head"><div><h2>Barcode scannen</h2><p>Richt de camera op een winkelbarcode of Home Stock-label.</p></div><button class="close" data-close>×</button></div>
+  <div class="scanner-view"><video id="scan-video" autoplay playsinline muted></video><div class="scan-guide"><span></span></div></div>
+  <canvas id="scan-canvas" hidden></canvas><div class="scan-actions"><button class="secondary" id="scan-photo">📷 Foto scannen</button><input id="scan-file" type="file" accept="image/*" capture="environment" hidden></div>
+  <div class="barcode-row"><input id="scan-manual" inputmode="text" autocapitalize="characters" placeholder="Of typ de barcode"><button class="primary" id="scan-use">Gebruiken</button></div><p id="scan-state" role="status"></p></div></dialog>
 
 <dialog id="notifications-dialog"><div class="modal"><div class="modal-head"><div><h2>Meldingen</h2></div><button class="close" data-close>×</button></div><div id="notifications-list" class="list"></div><div class="modal-actions"><button class="secondary" id="notifications-read">Alles gelezen</button></div></div></dialog>
-<div id="toast"></div><script src="/static/app.js"></script>
+<div id="toast"></div><script src="/static/app.js?v={{ version }}"></script>
 </body></html>

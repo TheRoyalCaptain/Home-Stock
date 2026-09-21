@@ -2,6 +2,20 @@
 
 Home Stock is a self-hosted household inventory and expiry tracker for umbrelOS. It combines the simple fridge overview of Fridge Assistant with practical Grocy-style stock features and printable DYMO labels.
 
+## iPhone web app and camera scanner (v0.6.0)
+
+Home Stock is installable from Safari with **Share → Add to Home Screen** and
+runs in a standalone, iOS-safe layout with an app icon, safe-area support and a
+touch-friendly bottom navigation bar. Authentication remains required in the
+installed web app.
+
+The scanner uses the iPhone's rear camera for EAN, UPC, Code 128, QR and Home
+Stock container codes. Because iOS does not reliably expose the browser barcode
+API, camera frames are decoded locally by the Home Stock server with ZXing. No
+camera image is sent to a cloud service or stored. Live camera access requires
+HTTPS. A **Foto scannen** option uses the iPhone camera as a secure fallback when
+the app is reached over plain local HTTP.
+
 ## Multiple containers (v0.5.0)
 
 A single cooking session or purchase can now be stored as up to 99 separate

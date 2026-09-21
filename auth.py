@@ -68,11 +68,11 @@ def install_auth(app, db):
                     if row["user_id"]:
                         user = c.execute("SELECT * FROM auth_users WHERE id=?", (row["user_id"],)).fetchone()
                         g.auth_user = dict(user) if user else None
-        public = request.endpoint in {"login", "static", "health"}
+        public = request.endpoint in {"login", "static", "health", "service_worker"}
         if not public and not g.auth_user:
             return failure("Log opnieuw in om verder te gaan.", 401) if request.path.startswith("/api/") else redirect("/login")
         if g.auth_user and g.auth_user["must_change"] and request.endpoint not in {
-                "login", "change_password", "logout", "static", "health"}:
+                "login", "change_password", "logout", "static", "health", "service_worker"}:
             return (jsonify(error="Wijzig eerst je standaardwachtwoord.", password_change_required=True), 403) if request.path.startswith("/api/") else redirect("/account/password")
         if g.auth_user and g.auth_user["role"] != "admin" and (
                 request.path.startswith("/account/users") or
@@ -92,7 +92,9 @@ def install_auth(app, db):
 
     @app.after_request
     def security_headers(response):
-        response.headers["Cache-Control"] = "no-store"
+        response.headers["Cache-Control"] = ("public,max-age=86400" if request.endpoint == "static"
+                                              else "no-cache" if request.endpoint == "service_worker"
+                                              else "no-store")
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "same-origin"
