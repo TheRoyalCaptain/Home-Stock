@@ -109,7 +109,8 @@
     <label>Soort<select name="product_type" id="product-type"><option value="homemade">Zelfgemaakt / bak eten</option><option value="store">Winkelproduct</option></select></label><label>Naam<input name="name" required></label>
     <label class="wide">Inhoud of ingrediënten<textarea name="contents" rows="2" placeholder="Bijvoorbeeld: pasta, vegetarisch gehakt, tomaat en kaas"></textarea></label>
     <label>Merk<input name="brand"></label><label>Categorie<input name="category"></label>
-    <label>Aantal<input name="quantity" type="number" min="0" step=".01" value="1"></label><label>Eenheid<input name="unit" value="stuks"></label>
+    <label>Aantal bakken / verpakkingen<input name="container_count" type="number" min="1" max="99" step="1" value="1"></label><label>Hoeveelheid per bak / verpakking<input name="quantity" type="number" min="0" step=".01" value="1"></label>
+    <label>Eenheid per bak<input name="unit" value="stuks"></label>
     <label>Minimumvoorraad<input name="minimum" type="number" min="0" step=".01" value="0"></label><label>Locatie<select name="location_id" id="product-location"></select></label>
     <label>Winkel<input name="store"></label><label>Prijs per eenheid<input name="unit_price" type="number" min="0" step=".01"></label>
     <label>Ingelegd of gekocht op<input name="purchase_date" type="date"></label><label><span id="production-date-label">Bereid op</span><input name="production_date" type="date"></label>
@@ -117,7 +118,7 @@
   </div>
   <div class="estimate-box"><button type="button" class="secondary" id="estimate-expiry">✨ Houdbaarheid bepalen</button><span id="estimate-result">Lokale regels worden eerst gebruikt.</span></div>
   <label class="checkline"><input name="remember_shelf" type="checkbox"> Deze aangepaste houdbaarheid onthouden voor dit product en deze locatie</label>
-  <hr><div class="label-choice"><label class="checkline"><input name="create_label" type="checkbox" checked> Label maken na opslaan</label><label>Aantal labels<input name="label_copies" type="number" min="1" max="99" value="1"></label></div>
+  <hr><div class="label-choice"><label class="checkline"><input name="create_label" type="checkbox" checked> Voor iedere bak een eigen label maken</label><label>Exemplaren per bak<input name="label_copies" type="number" min="1" max="99" value="1"></label></div>
   <label>Notities<textarea name="notes" rows="2"></textarea></label>
   <div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Product opslaan</button></div>
 </form></dialog>
@@ -134,7 +135,7 @@
     <div class="label-meta"><span id="label-owner"></span><span id="label-quantity"></span></div>
     <small id="label-footer"></small>
   </div>
-  <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="secondary" id="label-browser-print">Via browser printen</button><button class="primary" id="label-print">Direct printen</button></div></div></dialog>
+  <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="secondary" id="label-browser-print">Via browser printen</button><button class="primary" id="label-print-batch" style="display:none">Alle labels printen</button><button class="primary" id="label-print">Direct printen</button></div></div></dialog>
 
 <dialog id="recipe-dialog"><form id="recipe-form" class="modal"><div class="modal-head"><div><h2>Recept toevoegen</h2></div><button type="button" class="close" data-close>×</button></div>
   <div class="form-grid"><label class="wide">Naam<input name="name" required></label><label>Emoji<input name="emoji" value="🍽️"></label><label>Porties<input name="servings" type="number" min="1" value="2"></label><label>Bereidingstijd<input name="prep_minutes" type="number" min="0"></label></div>

@@ -108,7 +108,7 @@ def label_pdf(data, path):
         canvas.setFont("Helvetica",5);canvas.drawRightString(width-margin-5,height-margin-11,kind)
         canvas.setFillColorRGB(0,0,0)
         wrapped(canvas,name,margin,height-margin-32,width-2*margin,"Helvetica-Bold",11,2,12)
-        canvas.setFont("Helvetica-Bold",25);canvas.drawCentredString(width/2,height-margin-76,safe_text(data.get("short_code"),5))
+        canvas.setFont("Helvetica-Bold",22);canvas.drawCentredString(width/2,height-margin-76,safe_text(data.get("lot_code") or data.get("short_code"),12))
         barcode=code128.Code128(value,barHeight=10*mm,barWidth=.22*mm,humanReadable=False)
         scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,height-margin-112);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
         canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,height-margin-122,"INHOUD / INGREDIËNTEN")
@@ -129,7 +129,7 @@ def label_pdf(data, path):
         canvas.setFont("Helvetica",4.5);canvas.drawCentredString(width/2,2*mm,"HOME STOCK · BEWAARETIKET")
     else:
         canvas.setFont("Helvetica-Bold",9);canvas.drawString(margin,height-margin-7,name)
-        canvas.setFont("Helvetica-Bold",15);canvas.drawRightString(width-margin,height-margin-18,safe_text(data.get("short_code"),5))
+        canvas.setFont("Helvetica-Bold",13);canvas.drawRightString(width-margin,height-margin-18,safe_text(data.get("lot_code") or data.get("short_code"),12))
         barcode=code128.Code128(value,barHeight=8*mm,barWidth=.21*mm,humanReadable=False)
         scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,4*mm);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
         canvas.setFont("Helvetica",5);canvas.drawRightString(width-margin,1.5*mm,safe_text(data.get("footer"),60))

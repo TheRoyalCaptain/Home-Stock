@@ -21,7 +21,7 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
@@ -62,6 +62,48 @@ def article_code(connection, name):
         candidate=f"{prefix}{number_value:03d}"
         if candidate not in used:return candidate
     raise ValueError(f"Geen vrije artikelcodes meer voor {prefix}")
+
+
+def suffix_letters(number_value):
+    """Return spreadsheet-style letters: 1=A, 26=Z, 27=AA."""
+    result = ""
+    while number_value > 0:
+        number_value, remainder = divmod(number_value - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def suffix_number(value):
+    result = 0
+    for character in value:
+        result = result * 26 + ord(character) - 64
+    return result
+
+
+def container_count(value):
+    try:
+        result = int(value or 1)
+    except (TypeError, ValueError):
+        raise ValueError("Aantal bakken moet een heel getal zijn")
+    if not 1 <= result <= 99:
+        raise ValueError("Aantal bakken moet tussen 1 en 99 liggen")
+    return result
+
+
+def container_codes(connection, product_id, short_code, count):
+    pattern = re.compile(rf"^{re.escape(short_code)}-([A-Z]+)$")
+    used = set()
+    for row in connection.execute("SELECT lot_code FROM stock_lots WHERE product_id=?", (product_id,)):
+        match = pattern.fullmatch(row[0] or "")
+        if match:
+            used.add(suffix_number(match.group(1)))
+    codes = []
+    candidate = 1
+    while len(codes) < count:
+        if candidate not in used:
+            codes.append(f"{short_code}-{suffix_letters(candidate)}")
+        candidate += 1
+    return codes
 
 
 def setting(connection, key, default=""):
@@ -471,6 +513,8 @@ def create_product():
     p=body(); name=str(p.get("name","")).strip()
     if not name:return jsonify(error="Naam is verplicht"),400
     quantity=number(p.get("quantity"),1,0)
+    try: containers=container_count(p.get("container_count"))
+    except ValueError as error:return jsonify(error=str(error)),400
     location_id=int(p.get("location_id") or 1)
     purchase=iso_date(p.get("purchase_date")) or date.today().isoformat()
     production=iso_date(p.get("production_date"))
@@ -493,28 +537,31 @@ def create_product():
            p.get("default_shelf_days") or None,p.get("opened_shelf_days") or None,
            short_code,product_type,str(p.get("contents") or ""))).lastrowid
         if barcode:c.execute("INSERT INTO barcodes(product_id,barcode) VALUES(?,?)",(pid,barcode))
-        lot_id=lot_code=None
+        lot_ids=[];lot_codes=[];job_ids=[]
         if quantity>0:
-            lot_code=unique_code(c)
-            lot_id=c.execute("""INSERT INTO stock_lots
-              (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
-               unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-              (pid,location_id,quantity,str(p.get("unit") or "stuks"),purchase,production,expiry,
-               number(p.get("unit_price"),0) or None,str(p.get("store") or ""),
-               lot_code,actor(p))).lastrowid
-            c.execute("""INSERT INTO stock_transactions
-              (product_id,lot_id,profile_id,action,quantity,unit_price,store,note)
-              VALUES(?,?,?,'purchase',?,?,?,'Product toegevoegd')""",
-              (pid,lot_id,actor(p),quantity,number(p.get("unit_price"),0) or None,
-               str(p.get("store") or "")))
-        job_id=None
-        if p.get("create_label") and lot_id:
-            job_id=c.execute("""INSERT INTO label_jobs
-              (product_id,lot_id,status,copies,template,label_size)
-              VALUES(?,?,'preview',?,?,?)""",
-              (pid,lot_id,int(p.get("label_copies") or 1),
-               setting(c,"label_template","storage"),setting(c,"label_size","101x54"))).lastrowid
-    return jsonify(id=pid,short_code=short_code,lot_id=lot_id,lot_code=lot_code,label_job_id=job_id),201
+            for lot_code in container_codes(c,pid,short_code,containers):
+                lot_id=c.execute("""INSERT INTO stock_lots
+                  (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
+                   unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                  (pid,location_id,quantity,str(p.get("unit") or "stuks"),purchase,production,expiry,
+                   number(p.get("unit_price"),0) or None,str(p.get("store") or ""),
+                   lot_code,actor(p))).lastrowid
+                lot_ids.append(lot_id);lot_codes.append(lot_code)
+                c.execute("""INSERT INTO stock_transactions
+                  (product_id,lot_id,profile_id,action,quantity,unit_price,store,note)
+                  VALUES(?,?,?,'purchase',?,?,?,'Bak of verpakking toegevoegd')""",
+                  (pid,lot_id,actor(p),quantity,number(p.get("unit_price"),0) or None,
+                   str(p.get("store") or "")))
+                if p.get("create_label"):
+                    job_ids.append(c.execute("""INSERT INTO label_jobs
+                      (product_id,lot_id,status,copies,template,label_size)
+                      VALUES(?,?,'preview',?,?,?)""",
+                      (pid,lot_id,int(p.get("label_copies") or 1),
+                       setting(c,"label_template","storage"),setting(c,"label_size","101x54"))).lastrowid)
+    return jsonify(id=pid,short_code=short_code,container_count=len(lot_ids),
+        lot_id=lot_ids[0] if lot_ids else None,lot_code=lot_codes[0] if lot_codes else None,
+        label_job_id=job_ids[0] if job_ids else None,lot_ids=lot_ids,lot_codes=lot_codes,
+        label_job_ids=job_ids),201
 
 
 @app.put("/api/products/<int:product_id>")
@@ -544,24 +591,37 @@ def delete_product(product_id):
 @app.post("/api/products/<int:product_id>/lots")
 def add_lot(product_id):
     p=body(); quantity=number(p.get("quantity"),1,.01)
+    try: containers=container_count(p.get("container_count"))
+    except ValueError as error:return jsonify(error=str(error)),400
     with db() as c:
+        c.execute("BEGIN IMMEDIATE")
         product=c.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
         if not product:return jsonify(error="Product niet gevonden"),404
-        code=unique_code(c)
-        lot_id=c.execute("""INSERT INTO stock_lots
-          (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
-           unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-          (product_id,int(p.get("location_id") or 1),quantity,
-           str(p.get("unit") or product["unit"]),
-           iso_date(p.get("purchase_date")) or date.today().isoformat(),
-           iso_date(p.get("production_date")),iso_date(p.get("expiry_date")),number(p.get("unit_price"),0) or None,
-           str(p.get("store") or ""),code,actor(p))).lastrowid
-        c.execute("""INSERT INTO stock_transactions
-          (product_id,lot_id,profile_id,action,quantity,unit_price,store,note)
-          VALUES(?,?,?,'purchase',?,?,?,'Partij toegevoegd')""",
-          (product_id,lot_id,actor(p),quantity,number(p.get("unit_price"),0) or None,
-           str(p.get("store") or "")))
-    return jsonify(id=lot_id,lot_code=code),201
+        lot_ids=[];codes=[];job_ids=[]
+        for code in container_codes(c,product_id,product["short_code"],containers):
+            lot_id=c.execute("""INSERT INTO stock_lots
+              (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
+               unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+              (product_id,int(p.get("location_id") or 1),quantity,
+               str(p.get("unit") or product["unit"]),
+               iso_date(p.get("purchase_date")) or date.today().isoformat(),
+               iso_date(p.get("production_date")),iso_date(p.get("expiry_date")),number(p.get("unit_price"),0) or None,
+               str(p.get("store") or ""),code,actor(p))).lastrowid
+            lot_ids.append(lot_id);codes.append(code)
+            c.execute("""INSERT INTO stock_transactions
+              (product_id,lot_id,profile_id,action,quantity,unit_price,store,note)
+              VALUES(?,?,?,'purchase',?,?,?,'Bak of verpakking toegevoegd')""",
+              (product_id,lot_id,actor(p),quantity,number(p.get("unit_price"),0) or None,
+               str(p.get("store") or "")))
+            if p.get("create_labels"):
+                job_ids.append(c.execute("""INSERT INTO label_jobs
+                  (product_id,lot_id,status,copies,template,label_size)
+                  VALUES(?,?,'preview',1,?,?)""",
+                  (product_id,lot_id,setting(c,"label_template","storage"),
+                   setting(c,"label_size","101x54"))).lastrowid)
+    return jsonify(id=lot_ids[0],lot_code=codes[0],container_count=len(lot_ids),
+        lot_ids=lot_ids,lot_codes=codes,label_job_id=job_ids[0] if job_ids else None,
+        label_job_ids=job_ids),201
 
 
 @app.post("/api/lots/<int:lot_id>/action")
@@ -884,7 +944,7 @@ def print_server_label(job_id):
         printer=setting(c,"default_printer","")
         detail=f"{number(job['quantity']):g} {job['unit']}"
         payload={"printer":printer,"name":job["name"],"detail":detail,
-          "short_code":job["short_code"],"product_type":job["product_type"],
+          "short_code":job["short_code"],"lot_code":job["lot_code"],"product_type":job["product_type"],
           "contents":job["contents"],"brand":job["brand"],"category":job["category"],
           "location":job["location"],
           "production_date":job["production_date"],"purchase_date":job["purchase_date"],

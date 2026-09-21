@@ -109,6 +109,7 @@ class AuthenticationTest(unittest.TestCase):
             payload = service.call_args_list[-1].args[1]
             self.assertEqual(payload["name"], "Printproduct")
             self.assertEqual(payload["short_code"], created["short_code"])
+            self.assertEqual(payload["lot_code"], created["lot_code"])
             self.assertEqual(payload["contents"], "Pasta en groente")
             self.assertEqual(payload["production_date"], "2026-09-21")
             self.assertEqual(payload["placed_by"], "Kevin")
@@ -116,6 +117,35 @@ class AuthenticationTest(unittest.TestCase):
             with db() as c:
                 self.assertEqual(c.execute("SELECT status FROM label_jobs WHERE id=?",
                     (created["label_job_id"],)).fetchone()[0], "printed")
+
+            batch = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Vegetarische pasta","quantity":1,"container_count":3,
+                "unit":"bak","location_id":2,"create_label":True,
+                "product_type":"homemade","contents":"Pasta, tomaat en kaas",
+                "production_date":"2026-09-21","expiry_date":"2026-12-21"})
+            self.assertEqual(batch.status_code, 201)
+            batch = batch.json
+            self.assertEqual(batch["container_count"], 3)
+            self.assertEqual(batch["lot_codes"], [f"{batch['short_code']}-{letter}" for letter in "ABC"])
+            self.assertEqual(len(batch["lot_ids"]), 3)
+            self.assertEqual(len(batch["label_job_ids"]), 3)
+            detail = client.get(f"/api/products/{batch['id']}").json
+            self.assertEqual(detail["product"]["stock"], 3)
+            self.assertEqual([lot["quantity"] for lot in detail["lots"]], [1, 1, 1])
+            self.assertEqual(client.get("/api/barcode/"+batch["lot_codes"][1]).json["lot"]["lot_id"], batch["lot_ids"][1])
+
+            consumed = client.post(f"/api/lots/{batch['lot_ids'][0]}/action",
+                headers={"X-CSRF-Token":csrf}, json={"action":"consume","quantity":1})
+            self.assertEqual(consumed.status_code, 200)
+            detail = client.get(f"/api/products/{batch['id']}").json
+            self.assertEqual(detail["product"]["stock"], 2)
+            self.assertEqual([lot["quantity"] for lot in detail["lots"]], [0, 1, 1])
+
+            extra = client.post(f"/api/products/{batch['id']}/lots",
+                headers={"X-CSRF-Token":csrf}, json={"quantity":1,"container_count":2,
+                    "unit":"bak","location_id":2,"create_labels":True}).json
+            self.assertEqual(extra["lot_codes"], [f"{batch['short_code']}-D", f"{batch['short_code']}-E"])
+            self.assertEqual(len(extra["label_job_ids"]), 2)
 
 
 if __name__ == "__main__":
