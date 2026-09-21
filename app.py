@@ -14,13 +14,13 @@ from pathlib import Path
 
 from barcode import Code128
 from barcode.writer import SVGWriter
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, g, jsonify, render_template, request
 
 app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.2"
 USER_AGENT = "HomeStock/0.2 (https://github.com/TheRoyalCaptain/Home-Stock)"
 
 
@@ -70,6 +70,8 @@ def iso_date(value):
 
 
 def actor(payload=None):
+    if getattr(g, "auth_user", None):
+        return g.auth_user["profile_id"]
     payload = payload or {}
     return int(payload.get("profile_id") or request.headers.get("X-Profile-Id") or 1)
 
@@ -951,6 +953,8 @@ def backup():
 
 
 init_db()
+from auth import install_auth
+install_auth(app, db)
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0",port=8080,debug=True)
+    app.run(host="0.0.0.0",port=8080,debug=False)

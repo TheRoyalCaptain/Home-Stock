@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home Stock · Gebruikers</title><link rel="stylesheet" href="/static/styles.css"></head>
+<body><main style="margin:0;max-width:900px;margin-inline:auto">
+<h1>Gebruikers beheren</h1><p><a href="/">Terug naar Home Stock</a></p>
+<section class="panel"><h2>Accounts</h2>
+{% for user in users %}<div class="list-row"><div class="list-main"><b>{{ user.username }}</b><small>{{ 'Beheerder' if user.role == 'admin' else 'Gebruiker' }} · {{ 'Wachtwoordwijziging vereist' if user.must_change else 'Actief' }}</small></div></div>{% endfor %}
+</section>
+<section class="panel" style="margin-top:20px"><h2>Gebruiker toevoegen</h2>
+<p>Beide rollen kunnen de gezamenlijke voorraad beheren. Alleen beheerders kunnen accounts aanmaken en systeeminstellingen wijzigen.</p>
+{% if request.args.get('created') %}<p role="status">Account aangemaakt. Deel het tijdelijke wachtwoord persoonlijk met de gebruiker.</p>{% endif %}
+{% if error %}<p role="alert" style="color:var(--red)">{{ error }}</p>{% endif %}
+<form method="post" class="stack">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Gebruikersnaam<input name="username" required maxlength="80" autocomplete="off" pattern="[a-zA-Z0-9._-]+"></label>
+<label>Tijdelijk wachtwoord<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label>
+<label>Rol<select name="role"><option value="member">Gebruiker</option><option value="admin">Beheerder</option></select></label>
+<p>De gebruiker moet bij de eerste login een eigen wachtwoord kiezen.</p>
+<button class="primary">Account aanmaken</button></form></section>
+</main></body></html>

@@ -7,7 +7,7 @@ services:
       APP_PORT: 8080
 
   web:
-    image: ghcr.io/theroyalcaptain/home-stock:0.2.1
+    image: ghcr.io/theroyalcaptain/home-stock:0.2.2
     user: "1000:1000"
     init: true
     restart: on-failure

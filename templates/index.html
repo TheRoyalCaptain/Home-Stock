@@ -2,6 +2,8 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="auth-profile" content="{{ auth_profile_id }}">
   <meta name="theme-color" content="#10251f"><title>Home Stock</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
@@ -20,6 +22,9 @@
     <button class="nav" data-page="settings">⚙ <i>Instellingen</i></button>
   </nav>
   <div class="profile-picker"><label>Actief profiel<select id="profile-select"></select></label></div>
+  <a class="nav" href="/account/password">Wachtwoord wijzigen</a>
+  {% if auth_role == 'admin' %}<a class="nav" href="/account/users">Gebruikers beheren</a>{% endif %}
+  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="nav" type="submit">Uitloggen</button></form>
 </aside>
 <main>
   <header><div><h1 id="page-title">Overzicht</h1><p id="page-subtitle">Je huishouden in één oogopslag.</p></div>

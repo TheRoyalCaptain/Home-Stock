@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Home Stock · Inloggen</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main style="margin:0;display:grid;place-items:center;min-height:100vh">
+    <section class="panel" style="width:100%;max-width:440px">
+      <h1>Home Stock</h1>
+      {% if mode == 'error' %}
+        <p role="alert">{{ error }}</p><a class="primary" href="/login">Terug naar inloggen</a>
+      {% else %}
+      <h2>{{ 'Inloggen' if mode == 'login' else 'Wachtwoord wijzigen' }}</h2>
+      {% if mode == 'login' %}<p>Log in om je voorraad te bekijken en te beheren.</p>
+      {% elif forced %}<p>Je gebruikt nog het standaardwachtwoord. Kies eerst een eigen wachtwoord om verder te gaan.</p>{% endif %}
+      {% if error %}<p role="alert" style="color:var(--red)">{{ error }}</p>{% endif %}
+      <form method="post" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if mode == 'login' %}
+        <label>Gebruikersnaam<input name="username" autocomplete="username" required maxlength="80" autofocus></label>
+        <label>Wachtwoord<input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+        {% else %}
+        <label>Huidig wachtwoord<input name="current_password" type="password" autocomplete="current-password" required maxlength="256" autofocus></label>
+        <label>Nieuw wachtwoord<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+        <label>Herhaal nieuw wachtwoord<input name="password_confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+        <p>Gebruik minimaal 12 tekens, bijvoorbeeld een lange, unieke wachtzin.</p>
+        {% endif %}
+        <button class="primary">{{ 'Inloggen' if mode == 'login' else 'Wachtwoord opslaan' }}</button>
+      </form>
+      {% if mode == 'password' %}
+      {% if not forced %}<p><a href="/">Terug naar voorraad</a></p>{% endif %}
+      <form method="post" action="/logout" style="margin-top:16px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary">Uitloggen</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>
