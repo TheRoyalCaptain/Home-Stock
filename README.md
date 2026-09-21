@@ -29,6 +29,25 @@ The application does not configure TLS or certificates on your server.
 
 Run authentication regression checks with `python -m unittest discover -s tests`.
 
+## Direct USB printing (v0.3.0)
+
+The Umbrel app includes an internal CUPS service for a USB-connected DYMO
+LabelWriter 400 or 450. It discovers the printer automatically, installs the
+matching open-source DYMO CUPS queue, and prints the PDF label directly from the
+server. The printer service is reachable only by the Home Stock web container;
+it does not expose a CUPS port on the host or local network. Only the printer
+sidecar receives access to `/dev/bus/usb`, using the USB character-device cgroup
+rule instead of privileged container mode.
+
+After updating, keep the printer connected and powered on. Open **Instellingen →
+Labels en meldingen**, select **Direct via USB-printer op de server**, choose the
+detected printer (or automatic selection), save, and use **Testlabel direct
+printen**. Label confirmation then uses direct server printing by default.
+Browser printing remains available from the label preview.
+
+Supported here: the DYMO LabelWriter 400 and 450 families using CUPS' DYMO
+driver. The newer 5-series protocol is not part of this integration.
+
 ## Features in v0.2.0
 
 - Normalized SQLite database with automatic v0.1 migration
@@ -41,7 +60,8 @@ Run authentication regression checks with `python -m unittest discover -s tests`
 - Low-stock and expiration notification center
 - Automatic and manual shopping lists
 - Recipes, ingredient stock matching and meal planning
-- DYMO label confirmation, queue and browser printing (57 × 32 or 101 × 54 mm)
+- DYMO label confirmation, queue, direct USB printing and browser printing
+  (57 × 32 or 101 × 54 mm)
 - CSV export, full JSON backup and responsive Dutch interface
 
 ## Install on Umbrel
@@ -63,7 +83,9 @@ Then open <http://localhost:8080>.
 
 ## Printer note
 
-The first release prints through the browser's print dialog. Select the DYMO LabelWriter and set paper size to 57 × 32 mm with margins disabled. Direct USB printing from the Umbrel server is planned as an optional print service.
+When using browser printing, select the DYMO LabelWriter and set paper size to
+57 × 32 mm with margins disabled. Direct USB printing is the default in the
+Umbrel app and requires no separate CUPS configuration.
 
 ## License
 

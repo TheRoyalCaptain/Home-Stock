@@ -3,10 +3,12 @@ import os
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 test_data = tempfile.TemporaryDirectory()
 os.environ["HOME_STOCK_DATA_DIR"] = test_data.name
 from app import app, db
+import app as app_module
 
 
 class AuthenticationTest(unittest.TestCase):
@@ -82,6 +84,30 @@ class AuthenticationTest(unittest.TestCase):
         with db() as c:
             c.execute("UPDATE auth_sessions SET expires=0")
         self.assertEqual(admin.get("/api/products").status_code, 401)
+
+    def test_direct_printer_api(self):
+        with db() as c:
+            c.execute("DELETE FROM auth_attempts")
+        client = app.test_client()
+        self.assertEqual(self.login(client, "admin", "A long unique passphrase!").status_code, 302)
+        page = client.get("/")
+        csrf = re.search(r'name="csrf-token" content="([^"]+)"', page.text)[1]
+        discovered = {"printers":[{"id":"Home_Stock_DYMO_450","name":"DYMO 450"}]}
+        printed = {"ok":True,"printer":{"id":"Home_Stock_DYMO_450","name":"DYMO 450"}}
+        with patch.object(app_module, "print_service", side_effect=[discovered, printed, printed]) as service:
+            self.assertEqual(client.get("/api/printers").json, discovered)
+            self.assertEqual(client.post("/api/printers/test", headers={"X-CSRF-Token":csrf}, json={}).status_code, 200)
+            created = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Printproduct","quantity":1,"location_id":1,"create_label":True}).json
+            response = client.post(f"/api/labels/{created['label_job_id']}/print",
+                                   headers={"X-CSRF-Token":csrf}, json={})
+            self.assertEqual(response.status_code, 200)
+            payload = service.call_args_list[-1].args[1]
+            self.assertEqual(payload["name"], "Printproduct")
+            self.assertEqual(payload["copies"], 1)
+            with db() as c:
+                self.assertEqual(c.execute("SELECT status FROM label_jobs WHERE id=?",
+                    (created["label_job_id"],)).fetchone()[0], "printed")
 
 
 if __name__ == "__main__":

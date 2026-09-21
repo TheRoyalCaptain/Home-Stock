@@ -20,8 +20,9 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.2.2"
-USER_AGENT = "HomeStock/0.2 (https://github.com/TheRoyalCaptain/Home-Stock)"
+APP_VERSION = "0.3.0"
+USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
+PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
 
 def db():
@@ -55,6 +56,22 @@ def setting(connection, key, default=""):
 
 def body():
     return request.get_json(silent=True) or {}
+
+
+def print_service(path, payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(PRINT_SERVICE_URL + path, data=data,
+        headers={"Content-Type":"application/json", "User-Agent":USER_AGENT},
+        method="POST" if payload is not None else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=35) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        try: message=json.loads(error.read()).get("error")
+        except Exception: message=None
+        raise RuntimeError(message or "De printerservice gaf een fout") from error
+    except (urllib.error.URLError, TimeoutError) as error:
+        raise RuntimeError("De USB-printerservice is niet bereikbaar") from error
 
 
 def number(value, default=0, minimum=None):
@@ -255,6 +272,7 @@ def init_db():
         defaults = {
             "gemini_model":"gemini-3.1-flash-lite","expiry_warning_days":"7",
             "label_size":"57x32","label_template":"compact","currency":"EUR",
+            "print_mode":"server","default_printer":"",
         }
         c.executemany("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", defaults.items())
         seed_rules(c)
@@ -788,6 +806,55 @@ def update_label(job_id):
     return jsonify(ok=True)
 
 
+def label_for_print(c, job_id):
+    return c.execute("""SELECT j.*,p.name,p.unit,l.quantity,l.expiry_date,
+      l.lot_code,loc.name location FROM label_jobs j
+      JOIN products p ON p.id=j.product_id
+      LEFT JOIN stock_lots l ON l.id=j.lot_id
+      LEFT JOIN locations loc ON loc.id=l.location_id WHERE j.id=?""",(job_id,)).fetchone()
+
+
+@app.get("/api/printers")
+def server_printers():
+    try:
+        return jsonify(print_service("/printers"))
+    except RuntimeError as error:
+        return jsonify(printers=[],error=str(error)),503
+
+
+@app.post("/api/printers/test")
+def test_server_printer():
+    p=body()
+    with db() as c:
+        printer=str(p.get("printer") or setting(c,"default_printer",""))
+        size=str(p.get("label_size") or setting(c,"label_size","57x32"))
+    try:
+        return jsonify(print_service("/test",{"printer":printer,"label_size":size}))
+    except RuntimeError as error:
+        return jsonify(error=str(error)),503
+
+
+@app.post("/api/labels/<int:job_id>/print")
+def print_server_label(job_id):
+    with db() as c:
+        job=label_for_print(c,job_id)
+        if not job:return jsonify(error="Label niet gevonden"),404
+        printer=setting(c,"default_printer","")
+        detail=f"{number(job['quantity']):g} {job['unit']}"
+        if job["expiry_date"]:detail+=f" · THT {job['expiry_date']}"
+        payload={"printer":printer,"name":job["name"],"detail":detail,
+          "footer":f"{job['location'] or 'Home Stock'} · {job['lot_code'] or ''}",
+          "barcode":job["lot_code"] or job["name"],"copies":job["copies"],
+          "label_size":job["label_size"]}
+    try:
+        result=print_service("/print",payload)
+    except RuntimeError as error:
+        return jsonify(error=str(error)),503
+    with db() as c:
+        c.execute("UPDATE label_jobs SET status='printed',printed_at=CURRENT_TIMESTAMP WHERE id=?",(job_id,))
+    return jsonify(result)
+
+
 @app.get("/api/barcode.svg")
 def barcode_svg():
     value=request.args.get("value","HOME-STOCK")[:80]
@@ -915,10 +982,10 @@ def get_settings():
 @app.put("/api/settings")
 def save_settings():
     p=body();allowed={"gemini_api_key","gemini_model","expiry_warning_days",
-                      "label_size","label_template","currency"}
+                      "label_size","label_template","currency","print_mode","default_printer"}
     with db() as c:
         for key,value in p.items():
-            if key in allowed and value not in (None,""):
+            if key in allowed and (value not in (None,"") or key=="default_printer"):
                 c.execute("""INSERT INTO settings(key,value) VALUES(?,?)
                   ON CONFLICT(key) DO UPDATE SET value=excluded.value,
                   updated_at=CURRENT_TIMESTAMP""",(key,str(value)))

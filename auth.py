@@ -76,7 +76,7 @@ def install_auth(app, db):
             return (jsonify(error="Wijzig eerst je standaardwachtwoord.", password_change_required=True), 403) if request.path.startswith("/api/") else redirect("/account/password")
         if g.auth_user and g.auth_user["role"] != "admin" and (
                 request.path.startswith("/account/users") or
-                (request.path in {"/api/settings", "/api/profiles"} and request.method not in {"GET", "HEAD"})):
+                (request.path in {"/api/settings", "/api/profiles", "/api/printers/test"} and request.method not in {"GET", "HEAD"})):
             return failure("Alleen beheerders mogen dit aanpassen.")
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             csrf = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token", "")

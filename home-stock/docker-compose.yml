@@ -7,16 +7,36 @@ services:
       APP_PORT: 8080
 
   web:
-    image: ghcr.io/theroyalcaptain/home-stock:0.2.2
+    image: ghcr.io/theroyalcaptain/home-stock:0.3.0
     user: "1000:1000"
     init: true
     restart: on-failure
     environment:
       HOME_STOCK_DATA_DIR: /data
+      HOME_STOCK_PRINT_SERVICE_URL: http://printer:8631
+    depends_on:
+      printer:
+        condition: service_healthy
     volumes:
       - ${APP_DATA_DIR}/data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  printer:
+    image: ghcr.io/theroyalcaptain/home-stock:0.3.0
+    user: "0:0"
+    init: true
+    restart: on-failure
+    command: ["/app/print-service-entrypoint.sh"]
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+    device_cgroup_rules:
+      - "c 189:* rwm"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8631/health')"]
       interval: 30s
       timeout: 5s
       retries: 5

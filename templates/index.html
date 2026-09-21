@@ -90,6 +90,11 @@
         <form id="profile-form" class="inline-form"><input name="avatar" value="👤" maxlength="4"><input name="name" placeholder="Naam" required><button class="primary">＋</button></form></article>
       <article class="panel"><h2>Labels en meldingen</h2><form id="general-form" class="stack">
         <label>Standaard label<select name="label_size"><option value="57x32">57 × 32 mm</option><option value="101x54">DYMO 99014 · 101 × 54 mm</option></select></label>
+        <label>Standaard afdrukmethode<select name="print_mode"><option value="server">Direct via USB-printer op de server</option><option value="browser">Afdrukvenster van de browser</option></select></label>
+        <label>Standaard USB-printer<select name="default_printer" id="default-printer"><option value="">Automatisch kiezen</option></select></label>
+        <div id="printer-status" class="estimate-box">Printerstatus wordt opgehaald…</div>
+        <button type="button" class="secondary" id="printer-refresh">Printers opnieuw zoeken</button>
+        <button type="button" class="secondary" id="printer-test">Testlabel direct printen</button>
         <label>Waarschuwen vóór houdbaarheid<input name="expiry_warning_days" type="number" min="1" value="7"></label><button class="primary">Opslaan</button></form></article>
       <article class="panel"><h2>Gegevens</h2><div class="button-row"><a class="secondary" href="/api/export.csv">CSV-export</a><a class="secondary" href="/api/backup.json">JSON-back-up</a></div></article>
     </div>
@@ -118,7 +123,7 @@
 
 <dialog id="label-dialog"><div class="modal label-modal"><div class="modal-head"><div><h2>Labelvoorbeeld</h2><p>Controleer het label voordat je print.</p></div><button class="close" data-close>×</button></div>
   <div id="print-label" class="print-label"><strong id="label-name"></strong><b id="label-detail"></b><img id="label-barcode" alt="Barcode"><span id="label-footer"></span></div>
-  <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="primary" id="label-print">Nu printen</button></div></div></dialog>
+  <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="secondary" id="label-browser-print">Via browser printen</button><button class="primary" id="label-print">Direct printen</button></div></div></dialog>
 
 <dialog id="recipe-dialog"><form id="recipe-form" class="modal"><div class="modal-head"><div><h2>Recept toevoegen</h2></div><button type="button" class="close" data-close>×</button></div>
   <div class="form-grid"><label class="wide">Naam<input name="name" required></label><label>Emoji<input name="emoji" value="🍽️"></label><label>Porties<input name="servings" type="number" min="1" value="2"></label><label>Bereidingstijd<input name="prep_minutes" type="number" min="0"></label></div>

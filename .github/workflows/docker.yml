@@ -6,6 +6,8 @@ on:
     paths:
       - "app.py"
       - "auth.py"
+      - "printer_service.py"
+      - "print-service-entrypoint.sh"
       - "tests/**"
       - "Dockerfile"
       - "requirements.txt"
@@ -41,7 +43,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/theroyalcaptain/home-stock:0.2.2
+            ghcr.io/theroyalcaptain/home-stock:0.3.0
             ghcr.io/theroyalcaptain/home-stock:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.2.2"
+version: "0.3.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -13,11 +13,13 @@ description: >-
 
 
   Labels worden bij het toevoegen direct als controleerbaar voorbeeld gemaakt.
-  Kies daarna overslaan, in de wachtrij plaatsen of afdrukken via het
-  afdrukvenster van je browser. Kies daar je
-  DYMO LabelWriter en het juiste labelformaat. Direct printen via de USB-poort van
-  de Umbrel-server wordt later als optionele printerservice toegevoegd.
+  Een DYMO LabelWriter 400 of 450 die via USB op de Umbrel-server is aangesloten
+  wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
+  blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.3.0 voegt automatische USB-detectie, een ingebouwde CUPS-printerservice,
+  direct printen, een standaardprinter en een testlabel toe voor de DYMO
+  LabelWriter 400- en 450-serie.
   v0.2.2 voegt verplichte login, wachtwoordwijziging bij eerste gebruik,
   gebruikersbeheer, beheerdersrechten en beveiligde sessies toe.
   v0.2.1 vervangt browserpop-ups door formulieren met dropdowns, aantallen,

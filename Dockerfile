@@ -10,13 +10,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      cups cups-client cups-filters printer-driver-dymo \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r requirements.txt
 
-COPY app.py auth.py ./
+COPY app.py auth.py printer_service.py print-service-entrypoint.sh ./
 COPY templates templates
 COPY static static
 
-RUN mkdir -p /data && chown -R 1000:1000 /app /data
+RUN chmod 0755 /app/print-service-entrypoint.sh \
+    && mkdir -p /data && chown -R 1000:1000 /app /data
 USER 1000:1000
 
 EXPOSE 8080
