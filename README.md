@@ -2,16 +2,20 @@
 
 Home Stock is a self-hosted household inventory and expiry tracker for umbrelOS. It combines the simple fridge overview of Fridge Assistant with practical Grocy-style stock features and printable DYMO labels.
 
-## Features in v0.1.0
+## Features in v0.2.0
 
-- Dashboard with total stock, low-stock and expiring-soon counters
-- Products with quantity, minimum stock, location, category, barcode and expiry date
-- Quick stock adjustments
-- Automatic shopping list based on minimum stock, plus manual items
-- Expiry overview
-- DYMO-friendly label preview and browser printing (57 × 32 mm default)
-- SQLite persistence, CSV export and JSON backup
-- Responsive Dutch web interface
+- Normalized SQLite database with automatic v0.1 migration
+- Separate stock lots with FIFO ordering, prices, stores and expiry dates
+- Fixed Koelkast, Vriezer and Voorraadkast locations plus custom locations
+- Retail barcode lookup through Open Food Facts and local HS lot barcodes
+- Automatic editable shelf-life estimates from local rules and optional Gemini Free Tier
+- Consumption, waste, spending and store statistics
+- Household profiles and complete activity history
+- Low-stock and expiration notification center
+- Automatic and manual shopping lists
+- Recipes, ingredient stock matching and meal planning
+- DYMO label confirmation, queue and browser printing (57 × 32 or 101 × 54 mm)
+- CSV export, full JSON backup and responsive Dutch interface
 
 ## Install on Umbrel
 
