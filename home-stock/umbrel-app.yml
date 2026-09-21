@@ -1,0 +1,35 @@
+manifestVersion: 1
+id: home-stock
+category: files
+name: Home Stock
+version: "0.1.0"
+tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
+description: >-
+  Home Stock is een eenvoudige, volledig zelfgehoste voorraadassistent voor thuis.
+  Beheer producten per kast, koelkast of vriezer, zie wat bijna op of over datum is,
+  maak automatisch een boodschappenlijst en druk compacte productlabels af.
+
+
+  De eerste versie print labels via het afdrukvenster van je browser. Kies daar je
+  DYMO LabelWriter en het juiste labelformaat. Direct printen via de USB-poort van
+  de Umbrel-server wordt later als optionele printerservice toegevoegd.
+releaseNotes: >-
+  Eerste versie met voorraadbeheer, houdbaarheidscontrole, boodschappenlijst,
+  barcodevelden, CSV/JSON-export en DYMO-labelweergave.
+
+developer: Kevin van Krugten
+website: https://github.com/TheRoyalCaptain/Home-Stock
+dependencies: []
+repo: https://github.com/TheRoyalCaptain/Home-Stock
+support: https://github.com/TheRoyalCaptain/Home-Stock/issues
+
+port: 8765
+gallery: []
+path: ""
+icon: https://raw.githubusercontent.com/TheRoyalCaptain/Home-Stock/main/home-stock/icon.svg
+
+defaultUsername: ""
+defaultPassword: ""
+
+submitter: Kevin van Krugten
+submission: https://github.com/TheRoyalCaptain/Home-Stock
