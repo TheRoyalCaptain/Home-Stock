@@ -12,9 +12,13 @@ een DYMO LabelWriter.
 - Zelf eigen locaties toevoegen
 - Meerdere bakken in één keer invoeren met codes als `VP001-A` en `VP001-B`
 - Iedere bak afzonderlijk verbruiken, verspillen, openen of verplaatsen
+- Voorraadacties veilig terugdraaien vanuit de activiteitshistorie
+- Verlopen voorraad in één keer opruimen en desgewenst terugzetten
 - Winkelbarcodes opzoeken via Open Food Facts
 - Home Stock-codes, EAN, UPC, Code 128 en QR scannen
+- Scannerstand voor direct verbruiken zonder extra tussenstappen
 - Automatische, handmatig aanpasbare houdbaarheidsinschatting
+- Beheerbare houdbaarheidssjablonen per product, categorie en locatie
 - Optionele Gemini Free Tier-inschatting als lokale regels niet voldoen
 - Verbruik, verspilling, prijzen, winkels en statistieken
 - Boodschappenlijst, recepten en maaltijdplanner
@@ -115,6 +119,19 @@ is. Stel bij TLS via een reverse proxy `HOME_STOCK_SECURE_COOKIE=1` in voor de
 webcontainer.
 
 ## Versiegeschiedenis
+
+### v0.10.0
+
+- Direct-verbruikenstand voor de live camera-, foto- en handmatige scanner
+- Verbruik, verspilling, correcties, openen en verplaatsen zijn terug te draaien
+- Verlopen voorraad kan in één actie worden opgeruimd met volledig herstel via geschiedenis
+- Filters op locatie, productsoort en houdbaarheidsstatus
+- Houdbaarheidssjablonen toevoegen, aanpassen, verbergen en herstellen
+- Dagelijkse houdbaarheidscontrole met instelbare tijd en aan/uit-schakelaar
+- Gepagineerde activiteitshistorie en zichtbare status van iedere losse bak
+- Productdetails als zijpaneel op desktop en bottom sheet op iPhone
+- Mobiele formulieren, knoppen, filters, dialoogvensters en veilige schermranden verbeterd
+- Alle ongewenste verwijzingen naar andere voorraadsoftware uit code en documentatie verwijderd
 
 ### v0.9.0
 

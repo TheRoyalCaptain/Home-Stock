@@ -6,6 +6,8 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
+import time as time_module
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,8 +23,8 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.9.0"
-USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
+APP_VERSION = "0.10.0"
+USER_AGENT = "HomeStock/0.10 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
 
@@ -181,8 +183,7 @@ def product_query():
     """
 
 
-def seed_rules(connection):
-    rules = [
+BUILTIN_RULES = [
         ("melk", "zuivel", "fridge", 7, 3), ("yoghurt", "zuivel", "fridge", 14, 5),
         ("kaas", "zuivel", "fridge", 21, 10), ("boter", "zuivel", "fridge", 30, 21),
         ("ei", "eieren", "fridge", 28, 7), ("kip", "vlees", "fridge", 2, 1),
@@ -196,10 +197,13 @@ def seed_rules(connection):
         ("pasta", "droog", "pantry", 730, 365), ("rijst", "droog", "pantry", 730, 365),
         ("saus", "sauzen", "pantry", 365, 7), ("sap", "dranken", "fridge", 14, 5),
     ]
+
+
+def seed_rules(connection):
     connection.executemany(
         """INSERT OR IGNORE INTO shelf_life_rules
         (name_pattern,category,location_kind,unopened_days,opened_days)
-        VALUES (?,?,?,?,?)""", rules
+        VALUES (?,?,?,?,?)""", BUILTIN_RULES
     )
 
 
@@ -286,7 +290,7 @@ def init_db():
           id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,lot_id INTEGER,
           profile_id INTEGER,action TEXT NOT NULL,quantity REAL NOT NULL DEFAULT 0,
           unit_price REAL,store TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '',
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,undone_at TEXT,undo_data TEXT,
           FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
           FOREIGN KEY(lot_id) REFERENCES stock_lots(id) ON DELETE SET NULL,
           FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE SET NULL);
@@ -295,6 +299,7 @@ def init_db():
           category TEXT NOT NULL DEFAULT '',location_kind TEXT NOT NULL,
           unopened_days INTEGER NOT NULL,opened_days INTEGER,
           source TEXT NOT NULL DEFAULT 'built-in',use_count INTEGER NOT NULL DEFAULT 0,
+          is_hidden INTEGER NOT NULL DEFAULT 0,
           UNIQUE(name_pattern,category,location_kind));
         CREATE TABLE IF NOT EXISTS settings(
           key TEXT PRIMARY KEY,value TEXT NOT NULL,
@@ -347,6 +352,9 @@ def init_db():
             add_column(c, "products", definition)
         add_column(c,"stock_lots","production_date TEXT")
         add_column(c,"stock_lots","portion_grams REAL")
+        add_column(c,"stock_transactions","undone_at TEXT")
+        add_column(c,"stock_transactions","undo_data TEXT")
+        add_column(c,"shelf_life_rules","is_hidden INTEGER NOT NULL DEFAULT 0")
         for existing in c.execute("SELECT id,name FROM products WHERE short_code IS NULL OR short_code='' ORDER BY id").fetchall():
             c.execute("UPDATE products SET short_code=? WHERE id=?",
                       (article_code(c,existing["name"]),existing["id"]))
@@ -361,6 +369,7 @@ def init_db():
             "gemini_model":"gemini-3.1-flash-lite","expiry_warning_days":"7",
             "label_size":"101x54","label_template":"storage","currency":"EUR",
             "print_mode":"server","default_printer":"",
+            "notifications_enabled":"1","notification_time":"09:00",
         }
         c.executemany("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", defaults.items())
         c.execute("UPDATE settings SET value='101x54' WHERE key='label_size' AND value='57x32'")
@@ -376,7 +385,7 @@ def estimate_local(c, name, category, location_kind, opened=False):
           (CASE WHEN name_pattern<>'' AND instr(?,lower(name_pattern))>0 THEN 100 ELSE 0 END+
            CASE WHEN category<>'' AND lower(category)=? THEN 50 ELSE 0 END+
            CASE WHEN location_kind=? THEN 20 ELSE 0 END) score
-          FROM shelf_life_rules WHERE location_kind=?
+          FROM shelf_life_rules WHERE location_kind=? AND is_hidden=0
           ORDER BY score DESC,length(name_pattern) DESC""",
         (clean_name, clean_category, location_kind, location_kind),
     ).fetchall()
@@ -492,6 +501,8 @@ def open_food_facts(barcode):
 
 
 def refresh_notifications(c):
+    if setting(c,"notifications_enabled","1")!="1":
+        return
     today = date.today()
     warning = int(setting(c, "expiry_warning_days", "7"))
     soon = (today+timedelta(days=warning)).isoformat()
@@ -516,6 +527,23 @@ def refresh_notifications(c):
           VALUES('low',?,?,?,?,?)""",
           (f"{product['name']} bijna op",f"Nog {product['stock']:g} {product['unit']}",
            product["id"],today.isoformat(),f"low:{product['id']}:{today.isoformat()}"))
+
+
+def notification_scheduler():
+    while True:
+        time_module.sleep(30)
+        try:
+            now=datetime.now();today=now.date().isoformat()
+            with db() as c:
+                if setting(c,"notifications_enabled","1")!="1":continue
+                check_time=setting(c,"notification_time","09:00")
+                if now.strftime("%H:%M")>=check_time and setting(c,"notification_last_run","")!=today:
+                    refresh_notifications(c)
+                    c.execute("""INSERT INTO settings(key,value) VALUES('notification_last_run',?)
+                      ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                      updated_at=CURRENT_TIMESTAMP""",(today,))
+        except Exception:
+            continue
 
 
 @app.get("/")
@@ -723,6 +751,11 @@ def lot_action(lot_id):
     with db() as c:
         lot=c.execute("SELECT * FROM stock_lots WHERE id=?",(lot_id,)).fetchone()
         if not lot:return jsonify(error="Partij niet gevonden"),404
+        product_archived=c.execute("SELECT is_archived FROM products WHERE id=?",
+                                   (lot["product_id"],)).fetchone()[0]
+        undo_data=json.dumps({"quantity":lot["quantity"],"location_id":lot["location_id"],
+          "opened_at":lot["opened_at"],"expiry_date":lot["expiry_date"],
+          "product_archived":product_archived})
         qty=number(p.get("quantity"),1,0); delta=0
         if action in {"consume","waste"}:
             qty=min(qty,lot["quantity"]);delta=-qty
@@ -746,18 +779,19 @@ def lot_action(lot_id):
         else:
             c.execute("""UPDATE stock_lots SET location_id=?,
               updated_at=CURRENT_TIMESTAMP WHERE id=?""",(int(p["location_id"]),lot_id))
-        c.execute("""INSERT INTO stock_transactions
-          (product_id,lot_id,profile_id,action,quantity,unit_price,store,note)
-          VALUES(?,?,?,?,?,?,?,?)""",
+        transaction_id=c.execute("""INSERT INTO stock_transactions
+          (product_id,lot_id,profile_id,action,quantity,unit_price,store,note,undo_data)
+          VALUES(?,?,?,?,?,?,?,?,?)""",
           (lot["product_id"],lot_id,actor(p),action,qty,lot["unit_price"],
-           lot["store"],str(p.get("note") or "")))
+           lot["store"],str(p.get("note") or ""),undo_data)).lastrowid
         remaining=c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots WHERE product_id=?",
                             (lot["product_id"],)).fetchone()[0]
         archived=bool(action in {"consume","waste"} and p.get("archive_when_empty") and remaining<=0.000001)
         if archived:
             c.execute("UPDATE products SET is_archived=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                       (lot["product_id"],))
-    return jsonify(ok=True,delta=delta,stock=remaining,archived=archived)
+    return jsonify(ok=True,delta=delta,stock=remaining,archived=archived,
+                   transaction_id=transaction_id)
 
 
 @app.get("/api/barcode/<barcode>")
@@ -789,6 +823,43 @@ def barcode_decode():
     except Exception:
         return jsonify(error="Het camerabeeld kon niet worden gelezen"),400
     return jsonify(found=bool(codes), codes=codes)
+
+
+@app.post("/api/barcode/<barcode>/consume")
+def consume_barcode(barcode):
+    p=body();barcode=re.sub(r"\s+","",barcode).upper()
+    with db() as c:
+        lot=c.execute("""SELECT l.*,p.is_archived FROM stock_lots l
+          JOIN products p ON p.id=l.product_id WHERE l.lot_code=? AND l.quantity>0""",
+          (barcode,)).fetchone()
+        exact=bool(lot)
+        if not lot:
+            product=c.execute("""SELECT DISTINCT p.id FROM products p LEFT JOIN barcodes b
+              ON b.product_id=p.id WHERE upper(p.short_code)=? OR b.barcode=?""",
+              (barcode,barcode)).fetchone()
+            if product:
+                lot=c.execute("""SELECT l.*,p.is_archived FROM stock_lots l JOIN products p
+                  ON p.id=l.product_id WHERE l.product_id=? AND l.quantity>0
+                  ORDER BY l.expiry_date IS NULL,l.expiry_date,l.created_at LIMIT 1""",
+                  (product["id"],)).fetchone()
+        if not lot:return jsonify(error="Geen beschikbare voorraad voor deze code"),404
+        quantity=lot["quantity"] if exact else min(number(p.get("quantity"),1,.001),lot["quantity"])
+        undo_data=json.dumps({"quantity":lot["quantity"],"location_id":lot["location_id"],
+          "opened_at":lot["opened_at"],"expiry_date":lot["expiry_date"],
+          "product_archived":lot["is_archived"]})
+        c.execute("UPDATE stock_lots SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                  (quantity,lot["id"]))
+        transaction_id=c.execute("""INSERT INTO stock_transactions
+          (product_id,lot_id,profile_id,action,quantity,unit_price,store,note,undo_data)
+          VALUES(?,?,?,'consume',?,?,?,'Via barcode verbruikt',?)""",
+          (lot["product_id"],lot["id"],actor(p),quantity,lot["unit_price"],lot["store"],
+           undo_data)).lastrowid
+        remaining=c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots WHERE product_id=?",
+                            (lot["product_id"],)).fetchone()[0]
+        archived=remaining<=.000001
+        if archived:c.execute("UPDATE products SET is_archived=1 WHERE id=?",(lot["product_id"],))
+    return jsonify(ok=True,product_id=lot["product_id"],lot_id=lot["id"],
+                   transaction_id=transaction_id,quantity=quantity,stock=remaining,archived=archived)
 
 
 @app.post("/api/expiry-estimate")
@@ -842,6 +913,66 @@ def save_shelf_rule():
           (str(p.get("name_pattern") or "").lower().strip(),
            str(p.get("category") or "").lower().strip(),loc["kind"],
            int(p["unopened_days"]),p.get("opened_days") or None))
+    return jsonify(ok=True)
+
+
+@app.get("/api/shelf-rules")
+def shelf_rules():
+    with db() as c:
+        rows=[dict(r) for r in c.execute("""SELECT r.*,COALESCE(l.name,r.location_kind) location_name
+          FROM shelf_life_rules r LEFT JOIN locations l ON l.kind=r.location_kind AND l.is_fixed=1
+          ORDER BY r.is_hidden,r.name_pattern,r.category,r.location_kind""")]
+    return jsonify(rows)
+
+
+@app.put("/api/shelf-rules/<int:rule_id>")
+def update_shelf_rule(rule_id):
+    p=body()
+    with db() as c:
+        rule=c.execute("SELECT * FROM shelf_life_rules WHERE id=?",(rule_id,)).fetchone()
+        if not rule:
+            return jsonify(error="Houdbaarheidsregel niet gevonden"),404
+        # Keep the identity of bundled rules stable so they can always be restored.
+        bundled=rule["source"] in {"built-in","aangepast"} and any(
+          r[:3]==(rule["name_pattern"],rule["category"],rule["location_kind"])
+          for r in BUILTIN_RULES)
+        name_pattern=rule["name_pattern"] if bundled else str(p.get("name_pattern") or "").lower().strip()
+        category=rule["category"] if bundled else str(p.get("category") or "").lower().strip()
+        location_kind=rule["location_kind"] if bundled else str(p.get("location_kind") or "fridge")
+        try:
+            c.execute("""UPDATE shelf_life_rules SET name_pattern=?,category=?,location_kind=?,
+              unopened_days=?,opened_days=?,source='aangepast',is_hidden=0 WHERE id=?""",
+              (name_pattern,category,location_kind,int(p.get("unopened_days") or 1),
+               int(p["opened_days"]) if p.get("opened_days") else None,rule_id))
+        except sqlite3.IntegrityError:
+            return jsonify(error="Voor deze combinatie bestaat al een regel"),409
+    return jsonify(ok=True)
+
+
+@app.delete("/api/shelf-rules/<int:rule_id>")
+def delete_shelf_rule(rule_id):
+    with db() as c:
+        rule=c.execute("SELECT * FROM shelf_life_rules WHERE id=?",(rule_id,)).fetchone()
+        if not rule:return jsonify(error="Houdbaarheidsregel niet gevonden"),404
+        bundled=rule["source"] in {"built-in","aangepast"} and any(
+          r[:3]==(rule["name_pattern"],rule["category"],rule["location_kind"])
+          for r in BUILTIN_RULES)
+        if bundled:c.execute("UPDATE shelf_life_rules SET is_hidden=1 WHERE id=?",(rule_id,))
+        else:c.execute("DELETE FROM shelf_life_rules WHERE id=?",(rule_id,))
+    return jsonify(ok=True)
+
+
+@app.post("/api/shelf-rules/<int:rule_id>/restore")
+def restore_shelf_rule(rule_id):
+    with db() as c:
+        rule=c.execute("SELECT * FROM shelf_life_rules WHERE id=?",(rule_id,)).fetchone()
+        if not rule:return jsonify(error="Houdbaarheidsregel niet gevonden"),404
+        original=next((r for r in BUILTIN_RULES if r[:3]==(
+          rule["name_pattern"],rule["category"],rule["location_kind"])),None)
+        if original:
+            c.execute("""UPDATE shelf_life_rules SET unopened_days=?,opened_days=?,source='built-in',
+              is_hidden=0 WHERE id=?""",(original[3],original[4],rule_id))
+        else:c.execute("UPDATE shelf_life_rules SET is_hidden=0 WHERE id=?",(rule_id,))
     return jsonify(ok=True)
 
 
@@ -905,22 +1036,22 @@ def stats():
           COALESCE(SUM(CASE WHEN action='consume' THEN quantity ELSE 0 END),0) consumed,
           COALESCE(SUM(CASE WHEN action='waste' THEN quantity ELSE 0 END),0) wasted,
           COALESCE(SUM(CASE WHEN action='waste' THEN quantity*COALESCE(unit_price,0) ELSE 0 END),0) waste_value
-          FROM stock_transactions WHERE date(created_at)>=?""",(since,)).fetchone()
+          FROM stock_transactions WHERE date(created_at)>=? AND undone_at IS NULL""",(since,)).fetchone()
         timeline=[dict(r) for r in c.execute("""SELECT date(created_at) day,
           SUM(CASE WHEN action='purchase' THEN quantity*COALESCE(unit_price,0) ELSE 0 END) spent,
           SUM(CASE WHEN action='consume' THEN quantity ELSE 0 END) consumed,
           SUM(CASE WHEN action='waste' THEN quantity ELSE 0 END) wasted
-          FROM stock_transactions WHERE date(created_at)>=?
+          FROM stock_transactions WHERE date(created_at)>=? AND undone_at IS NULL
           GROUP BY date(created_at) ORDER BY day""",(since,))]
         waste=[dict(r) for r in c.execute("""SELECT p.name,SUM(t.quantity) quantity,
           SUM(t.quantity*COALESCE(t.unit_price,0)) value
           FROM stock_transactions t JOIN products p ON p.id=t.product_id
-          WHERE t.action='waste' AND date(t.created_at)>=?
+          WHERE t.action='waste' AND date(t.created_at)>=? AND t.undone_at IS NULL
           GROUP BY p.id ORDER BY quantity DESC LIMIT 8""",(since,))]
         stores=[dict(r) for r in c.execute("""SELECT
           COALESCE(NULLIF(store,''),'Onbekend') store,
           SUM(quantity*COALESCE(unit_price,0)) spent
-          FROM stock_transactions WHERE action='purchase' AND date(created_at)>=?
+          FROM stock_transactions WHERE action='purchase' AND date(created_at)>=? AND undone_at IS NULL
           GROUP BY store ORDER BY spent DESC""",(since,))]
     return jsonify(**dict(totals),timeline=timeline,waste_products=waste,
                    stores=stores,days=days)
@@ -928,13 +1059,67 @@ def stats():
 
 @app.get("/api/history")
 def history():
+    offset=max(int(request.args.get("offset",0)),0)
+    limit=min(max(int(request.args.get("limit",50)),1),300)
     with db() as c:
         rows=[dict(r) for r in c.execute("""SELECT t.*,p.name,pr.name profile_name,l.lot_code
           FROM stock_transactions t JOIN products p ON p.id=t.product_id
           LEFT JOIN profiles pr ON pr.id=t.profile_id
           LEFT JOIN stock_lots l ON l.id=t.lot_id
-          ORDER BY t.created_at DESC LIMIT 300""")]
+          ORDER BY t.id DESC LIMIT ? OFFSET ?""",(limit,offset))]
     return jsonify(rows)
+
+
+@app.post("/api/history/<int:transaction_id>/undo")
+def undo_transaction(transaction_id):
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        tx=c.execute("SELECT * FROM stock_transactions WHERE id=?",(transaction_id,)).fetchone()
+        if not tx:return jsonify(error="Activiteit niet gevonden"),404
+        if tx["undone_at"]:return jsonify(error="Deze activiteit is al teruggedraaid"),409
+        if tx["action"] not in {"consume","waste","adjust","open","move"} or not tx["undo_data"]:
+            return jsonify(error="Deze activiteit kan niet worden teruggedraaid"),400
+        if c.execute("""SELECT 1 FROM stock_transactions WHERE lot_id=? AND id>? AND undone_at IS NULL
+          LIMIT 1""",(tx["lot_id"],transaction_id)).fetchone():
+            return jsonify(error="Draai eerst de nieuwere activiteit van deze partij terug"),409
+        previous=json.loads(tx["undo_data"])
+        c.execute("""UPDATE stock_lots SET quantity=?,location_id=?,opened_at=?,expiry_date=?,
+          updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+          (previous["quantity"],previous["location_id"],previous["opened_at"],
+           previous["expiry_date"],tx["lot_id"]))
+        c.execute("UPDATE products SET is_archived=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                  (previous.get("product_archived",0),tx["product_id"]))
+        c.execute("UPDATE stock_transactions SET undone_at=CURRENT_TIMESTAMP WHERE id=?",(transaction_id,))
+        c.execute("DELETE FROM notifications WHERE lot_id=?",(tx["lot_id"],))
+    return jsonify(ok=True,product_id=tx["product_id"])
+
+
+@app.post("/api/expired/cleanup")
+def cleanup_expired():
+    p=body();today=date.today().isoformat();lots_done=0;products=set()
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        lots=c.execute("""SELECT l.*,p.is_archived FROM stock_lots l JOIN products p
+          ON p.id=l.product_id WHERE p.is_archived=0 AND l.quantity>0
+          AND l.expiry_date IS NOT NULL AND l.expiry_date<?""",(today,)).fetchall()
+        for lot in lots:
+            undo_data=json.dumps({"quantity":lot["quantity"],"location_id":lot["location_id"],
+              "opened_at":lot["opened_at"],"expiry_date":lot["expiry_date"],
+              "product_archived":lot["is_archived"]})
+            c.execute("UPDATE stock_lots SET quantity=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",(lot["id"],))
+            c.execute("""INSERT INTO stock_transactions
+              (product_id,lot_id,profile_id,action,quantity,unit_price,store,note,undo_data)
+              VALUES(?,?,?,'waste',?,?,?,'Verlopen voorraad opgeruimd',?)""",
+              (lot["product_id"],lot["id"],actor(p),lot["quantity"],lot["unit_price"],
+               lot["store"],undo_data))
+            lots_done+=1;products.add(lot["product_id"])
+        for product_id in products:
+            if c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots WHERE product_id=?",
+                         (product_id,)).fetchone()[0]<=.000001:
+                c.execute("UPDATE products SET is_archived=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                          (product_id,))
+        c.execute("DELETE FROM notifications WHERE type='expiry' AND due_at<?",(today,))
+    return jsonify(ok=True,lots=lots_done,products=len(products))
 
 
 @app.get("/api/notifications")
@@ -1216,7 +1401,8 @@ def get_settings():
 @app.put("/api/settings")
 def save_settings():
     p=body();allowed={"gemini_api_key","gemini_model","expiry_warning_days",
-                      "label_size","label_template","currency","print_mode","default_printer"}
+                      "label_size","label_template","currency","print_mode","default_printer",
+                      "notifications_enabled","notification_time"}
     with db() as c:
         for key,value in p.items():
             if key in allowed and (value not in (None,"") or key=="default_printer"):
@@ -1256,6 +1442,7 @@ def backup():
 init_db()
 from auth import install_auth
 install_auth(app, db)
+threading.Thread(target=notification_scheduler,name="home-stock-notifications",daemon=True).start()
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=8080,debug=False)

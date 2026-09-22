@@ -235,6 +235,57 @@ class AuthenticationTest(unittest.TestCase):
             self.assertFalse(kept.json["archived"])
             self.assertIn(keep["id"], [p["id"] for p in client.get("/api/products").json])
 
+            # A scanned individual lot can be consumed and safely restored.
+            scan = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Scanportie","quantity":1,"location_id":1}).json
+            consumed = client.post(f"/api/barcode/{scan['lot_code']}/consume",
+                headers={"X-CSRF-Token":csrf}, json={})
+            self.assertEqual(consumed.status_code, 200)
+            self.assertTrue(consumed.json["archived"])
+            transaction_id = consumed.json["transaction_id"]
+            undone = client.post(f"/api/history/{transaction_id}/undo",
+                headers={"X-CSRF-Token":csrf}, json={})
+            self.assertEqual(undone.status_code, 200)
+            scan_detail = client.get(f"/api/products/{scan['id']}").json
+            self.assertEqual(scan_detail["product"]["stock"], 1)
+            self.assertEqual(scan_detail["lots"][0]["quantity"], 1)
+
+            # Expired cleanup is logged as waste and can also be undone.
+            expired = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Verlopen test","quantity":2,"location_id":1,
+                "expiry_date":"2020-01-01"}).json
+            cleaned = client.post("/api/expired/cleanup", headers={"X-CSRF-Token":csrf},
+                json={})
+            self.assertEqual(cleaned.status_code, 200)
+            self.assertGreaterEqual(cleaned.json["lots"], 1)
+            cleanup_tx = next(row for row in client.get("/api/history").json
+                              if row["product_id"] == expired["id"] and row["action"] == "waste")
+            self.assertEqual(client.post(f"/api/history/{cleanup_tx['id']}/undo",
+                headers={"X-CSRF-Token":csrf}, json={}).status_code, 200)
+            self.assertEqual(client.get(f"/api/products/{expired['id']}").json["product"]["stock"], 2)
+
+            # Shelf-life templates and configurable notification schedule persist.
+            rules = client.get("/api/shelf-rules").json
+            self.assertTrue(rules)
+            custom = client.post("/api/shelf-rules", headers={"X-CSRF-Token":csrf}, json={
+                "name_pattern":"testmaaltijd","category":"test","location_id":1,
+                "unopened_days":4,"opened_days":2})
+            self.assertEqual(custom.status_code, 200)
+            custom_rule = next(row for row in client.get("/api/shelf-rules").json
+                               if row["name_pattern"] == "testmaaltijd")
+            self.assertEqual(client.put(f"/api/shelf-rules/{custom_rule['id']}",
+                headers={"X-CSRF-Token":csrf}, json={"name_pattern":"testmaaltijd",
+                    "category":"test","location_kind":"fridge","unopened_days":5,
+                    "opened_days":2}).status_code, 200)
+            self.assertEqual(client.delete(f"/api/shelf-rules/{custom_rule['id']}",
+                headers={"X-CSRF-Token":csrf}).status_code, 200)
+            saved = client.put("/api/settings", headers={"X-CSRF-Token":csrf}, json={
+                "notifications_enabled":"0","notification_time":"18:30"})
+            self.assertEqual(saved.status_code, 200)
+            settings = client.get("/api/bootstrap").json["settings"]
+            self.assertEqual(settings["notifications_enabled"], "0")
+            self.assertEqual(settings["notification_time"], "18:30")
+
 
 if __name__ == "__main__":
     unittest.main()
