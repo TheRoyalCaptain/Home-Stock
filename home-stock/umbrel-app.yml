@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.8.0"
+version: "0.9.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,11 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.9.0 vernieuwt de volledige interface met een nieuw dashboard, modernere
+  voorraadkaarten, rustigere formulieren en modals, een aparte mobiele
+  ondernavigatie, grotere aanraakvlakken voor iPhone en een lichte en donkere
+  modus. Product toevoegen en barcode scannen zijn direct vanaf het dashboard
+  bereikbaar. Ook de login en het gebruikersbeheer hebben dezelfde nieuwe stijl.
   v0.8.0 voegt het gewicht per bak of verpakking toe. Gemini gebruikt het aantal
   gram samen met de naam en ingrediënten om een specifieke bereidingswijze met
   tijd en temperatuur of wattage te maken. Het gewicht verschijnt ook op het

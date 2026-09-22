@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <meta name="auth-profile" content="{{ auth_profile_id }}">
-  <meta name="theme-color" content="#10251f"><meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#14241e"><meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Home Stock"><meta name="format-detection" content="telephone=no">
   <title>Home Stock</title><link rel="manifest" href="/static/manifest.webmanifest">
@@ -13,29 +13,32 @@
 </head>
 <body>
 <aside class="sidebar">
-  <div class="brand"><span>H</span><div><b>Home Stock</b><small>v{{ version }}</small></div></div>
-  <nav>
-    <button class="nav active" data-page="dashboard">⌂ <i>Overzicht</i></button>
-    <button class="nav" data-page="stock">▦ <i>Voorraad</i></button>
-    <button class="nav" data-page="shopping">✓ <i>Boodschappen</i></button>
-    <button class="nav" data-page="recipes">♨ <i>Recepten</i></button>
-    <button class="nav" data-page="planner">▣ <i>Maaltijdplanner</i></button>
-    <button class="nav" data-page="stats">↗ <i>Statistieken</i></button>
-    <button class="nav" data-page="labels">▤ <i>Labels</i></button>
-    <button class="nav" data-page="history">↺ <i>Geschiedenis</i></button>
-    <button class="nav" data-page="settings">⚙ <i>Instellingen</i></button>
+  <div class="brand"><span class="brand-mark">HS</span><div><b>Home Stock</b><small>Thuisvoorraad · v{{ version }}</small></div></div>
+  <div class="nav-caption">Beheren</div>
+  <nav aria-label="Hoofdnavigatie">
+    <button class="nav active" data-page="dashboard"><span class="nav-icon">⌂</span><i>Overzicht</i></button>
+    <button class="nav" data-page="stock"><span class="nav-icon">▦</span><i>Voorraad</i></button>
+    <button class="nav" data-page="shopping"><span class="nav-icon">✓</span><i>Boodschappen</i></button>
+    <button class="nav" data-page="recipes"><span class="nav-icon">♨</span><i>Recepten</i></button>
+    <button class="nav" data-page="planner"><span class="nav-icon">▣</span><i>Maaltijdplanner</i></button>
+    <button class="nav" data-page="stats"><span class="nav-icon">↗</span><i>Statistieken</i></button>
+    <button class="nav" data-page="labels"><span class="nav-icon">▤</span><i>Labels</i></button>
+    <button class="nav" data-page="history"><span class="nav-icon">↺</span><i>Geschiedenis</i></button>
+    <button class="nav" data-page="settings"><span class="nav-icon">⚙</span><i>Instellingen</i></button>
   </nav>
-  <div class="profile-picker"><label>Actief profiel<select id="profile-select"></select></label></div>
-  <a class="nav" href="/account/password">Wachtwoord wijzigen</a>
-  {% if auth_role == 'admin' %}<a class="nav" href="/account/users">Gebruikers beheren</a>{% endif %}
-  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="nav" type="submit">Uitloggen</button></form>
+  <div class="sidebar-footer">
+    <div class="profile-picker"><label>Actief profiel<select id="profile-select"></select></label></div>
+    <div class="account-links"><a href="/account/password">Wachtwoord</a>{% if auth_role == 'admin' %}<a href="/account/users">Gebruikers</a>{% endif %}</div>
+    <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="logout-link" type="submit">Uitloggen</button></form>
+  </div>
 </aside>
 <main>
-  <header><div><h1 id="page-title">Overzicht</h1><p id="page-subtitle">Je huishouden in één oogopslag.</p></div>
-    <div class="header-actions"><button class="icon-btn" id="notifications-btn" title="Meldingen">🔔<b id="notification-count"></b></button>
-    <button class="primary" id="add-product">＋ Product toevoegen</button></div></header>
+  <header class="topbar"><div class="page-heading"><span class="eyebrow">HOME STOCK</span><h1 id="page-title">Overzicht</h1><p id="page-subtitle">Je huishouden in één oogopslag.</p></div>
+    <div class="header-actions"><button class="icon-btn" id="theme-toggle" title="Kleurmodus wisselen" aria-label="Kleurmodus wisselen">◐</button><button class="icon-btn" id="header-scan" title="Barcode scannen" aria-label="Barcode scannen">⌗</button><button class="icon-btn" id="notifications-btn" title="Meldingen" aria-label="Meldingen">♢<b id="notification-count"></b></button>
+    <button class="primary add-product-button" id="add-product"><span>＋</span> Product toevoegen</button></div></header>
 
   <section class="page active" id="page-dashboard">
+    <article class="welcome-card"><div><span class="welcome-kicker" id="dashboard-date">Vandaag</span><h2>Alles op voorraad, zonder giswerk.</h2><p>Bekijk wat bijna op is, gebruik eerst wat verloopt en leg nieuwe bakken direct met een label in.</p><div class="welcome-actions"><button class="primary" id="dashboard-add">＋ Product toevoegen</button><button class="ghost" id="dashboard-scan">⌗ Code scannen</button></div></div><div class="welcome-visual" aria-hidden="true"><span>❄</span><span>▤</span><span>✓</span></div></article>
     <div class="stats"><article><span>▦</span><small>Producten</small><b id="stat-products">0</b></article>
       <article><span>Σ</span><small>Totale voorraad</small><b id="stat-units">0</b></article>
       <article><span>◷</span><small>Binnen 7 dagen</small><b id="stat-expiring">0</b></article>
@@ -45,7 +48,7 @@
   </section>
 
   <section class="page" id="page-stock">
-    <div class="toolbar"><div class="search">⌕<input id="stock-search" placeholder="Zoek product, barcode of locatie"></div>
+    <div class="toolbar stock-toolbar"><div class="search"><span>⌕</span><input id="stock-search" placeholder="Zoek op naam, code, barcode of locatie"></div>
       <select id="stock-location"><option value="">Alle locaties</option></select>
       <button class="secondary" id="archived-products">Gearchiveerd</button>
       <button class="secondary" id="scan-open">▣ Barcode scannen</button></div>
@@ -82,7 +85,7 @@
     <div id="label-grid" class="label-grid"></div>
   </section>
 
-  <section class="page" id="page-history"><article class="panel"><div id="history-list" class="history-table"></div></article></section>
+  <section class="page" id="page-history"><article class="panel"><div class="panel-head"><div><h2>Activiteitshistorie</h2><p>Alle veranderingen chronologisch bij elkaar</p></div></div><div id="history-list" class="history-table"></div></article></section>
 
   <section class="page" id="page-settings">
     <div class="settings-grid">

@@ -116,6 +116,16 @@ webcontainer.
 
 ## Versiegeschiedenis
 
+### v0.9.0
+
+- Volledige visuele herbouw van dashboard, navigatie, voorraadkaarten en instellingen
+- Vernieuwde, rustigere login- en gebruikersbeheerschermen
+- Responsive iPhone-interface met grotere aanraakvlakken en mobiele ondernavigatie
+- Snelle knoppen voor product toevoegen en barcode scannen op het dashboard
+- Lichte en donkere modus met opgeslagen voorkeur
+- Verbeterde formulieren, modals, lege toestanden, statussen en focusweergave
+- De laatst geopende module blijft na verversen actief
+
 ### v0.8.0
 
 - Gewicht per bak of verpakking kan in gram worden opgeslagen en per partij worden aangepast

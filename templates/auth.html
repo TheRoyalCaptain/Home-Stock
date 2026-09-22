@@ -2,14 +2,15 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#10251f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Home Stock">
+  <meta name="theme-color" content="#14241e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Home Stock">
   <title>Home Stock · Inloggen</title><link rel="manifest" href="/static/manifest.webmanifest"><link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
-  <main style="margin:0;display:grid;place-items:center;min-height:100vh">
-    <section class="panel" style="width:100%;max-width:440px">
-      <h1>Home Stock</h1>
+<body class="auth-body">
+  <main class="auth-layout">
+    <section class="auth-intro"><div class="brand auth-brand"><span class="brand-mark">HS</span><div><b>Home Stock</b><small>Je slimme thuisvoorraad</small></div></div><div><span class="eyebrow">VEILIG · ZELFGEHOST</span><h1>Weet wat je hebt.<br>Gebruik wat eerst op moet.</h1><p>Voorraad, houdbaarheid en DYMO-labels in één rustige omgeving.</p></div><div class="auth-features"><span>✓ Eigen beveiligde login</span><span>✓ Je gegevens blijven op je server</span><span>✓ Ontworpen voor mobiel</span></div></section>
+    <section class="panel auth-card">
+      <div class="mobile-auth-brand"><span class="brand-mark">HS</span><b>Home Stock</b></div>
       {% if mode == 'error' %}
         <p role="alert">{{ error }}</p><a class="primary" href="/login">Terug naar inloggen</a>
       {% else %}

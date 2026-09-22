@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#10251f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Home Stock">
+<meta name="theme-color" content="#14241e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Home Stock">
 <title>Home Stock · Gebruikers</title><link rel="manifest" href="/static/manifest.webmanifest"><link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"><link rel="stylesheet" href="/static/styles.css"></head>
-<body><main style="margin:0;max-width:900px;margin-inline:auto">
-<h1>Gebruikers beheren</h1><p><a href="/">Terug naar Home Stock</a></p>
+<body class="standalone-body"><main class="standalone-main">
+<div class="standalone-head"><div><span class="eyebrow">BEHEER</span><h1>Gebruikers beheren</h1><p>Accounts en toegangsrechten voor Home Stock.</p></div><a class="secondary" href="/">← Terug naar Home Stock</a></div>
 <section class="panel"><h2>Accounts</h2>
 {% for user in users %}<div class="list-row"><div class="list-main"><b>{{ user.username }}</b><small>{{ 'Beheerder' if user.role == 'admin' else 'Gebruiker' }} · {{ 'Wachtwoordwijziging vereist' if user.must_change else 'Actief' }}</small></div></div>{% endfor %}
 </section>
