@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.7.0"
+version: "0.8.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,13 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.8.0 voegt het gewicht per bak of verpakking toe. Gemini gebruikt het aantal
+  gram samen met de naam en ingrediënten om een specifieke bereidingswijze met
+  tijd en temperatuur of wattage te maken. Het gewicht verschijnt ook op het
+  voorraadscherm en DYMO-label. Daarnaast kan een product na het verbruiken of
+  verspillen van de laatste voorraad
+  uit de actieve lijst halen zonder historie of statistieken te wissen. Een nieuwe
+  partij activeert het product opnieuw.
   v0.7.0 voegt een bereidingswijze toe aan het DYMO 99014-label. Gemini maakt
   een korte instructie op basis van zowel de naam als de ingrediënten. De tekst
   is controleerbaar, handmatig aanpasbaar en wordt per product opgeslagen.

@@ -86,7 +86,8 @@ toont onder andere:
 - Productnaam en unieke bakcode
 - Scanbare barcode
 - Inhoud of ingrediënten
-- Korte bereidings- of opwarminstructie op basis van naam én ingrediënten
+- Concrete bereidings- of opwarminstructie met tijd en temperatuur of wattage,
+  gebaseerd op naam én ingrediënten
 - Productie- of bereidingsdatum
 - Einddatum en hoeveelheid
 - Wie het product heeft ingelegd
@@ -114,6 +115,18 @@ is. Stel bij TLS via een reverse proxy `HOME_STOCK_SECURE_COOKIE=1` in voor de
 webcontainer.
 
 ## Versiegeschiedenis
+
+### v0.8.0
+
+- Gewicht per bak of verpakking kan in gram worden opgeslagen en per partij worden aangepast
+- Gemini gebruikt het gewicht samen met naam en ingrediënten voor de bereidingswijze
+- Het gewicht staat in het voorraadscherm, labelvoorbeeld en op het DYMO-label
+- Optie bij het verbruiken of verspillen van de laatste voorraad om het product
+  direct uit de actieve voorraadlijst te halen
+- Producten worden veilig gearchiveerd zodat historie en statistieken behouden blijven
+- Een nieuwe partij activeert een gearchiveerd product automatisch opnieuw
+- Gemini-bereidingswijzen bevatten voortaan een concrete tijd plus temperatuur
+  of magnetronvermogen
 
 ### v0.7.0
 

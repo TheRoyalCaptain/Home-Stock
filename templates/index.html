@@ -47,6 +47,7 @@
   <section class="page" id="page-stock">
     <div class="toolbar"><div class="search">⌕<input id="stock-search" placeholder="Zoek product, barcode of locatie"></div>
       <select id="stock-location"><option value="">Alle locaties</option></select>
+      <button class="secondary" id="archived-products">Gearchiveerd</button>
       <button class="secondary" id="scan-open">▣ Barcode scannen</button></div>
     <div id="product-grid" class="product-grid"></div>
   </section>
@@ -116,14 +117,14 @@
     <label class="wide">Inhoud of ingrediënten<textarea name="contents" rows="2" placeholder="Bijvoorbeeld: pasta, vegetarisch gehakt, tomaat en kaas"></textarea></label>
     <label>Merk<input name="brand"></label><label>Categorie<input name="category"></label>
     <label>Aantal bakken / verpakkingen<input name="container_count" type="number" min="1" max="99" step="1" value="1"></label><label>Hoeveelheid per bak / verpakking<input name="quantity" type="number" min="0" step=".01" value="1"></label>
-    <label>Eenheid per bak<input name="unit" value="stuks"></label>
+    <label>Gewicht per bak (gram)<input name="portion_grams" type="number" min="1" step="1" inputmode="decimal" placeholder="Bijvoorbeeld 500"></label><label>Eenheid per bak<input name="unit" value="stuks"></label>
     <label>Minimumvoorraad<input name="minimum" type="number" min="0" step=".01" value="0"></label><label>Locatie<select name="location_id" id="product-location"></select></label>
     <label>Winkel<input name="store"></label><label>Prijs per eenheid<input name="unit_price" type="number" min="0" step=".01"></label>
     <label>Ingelegd of gekocht op<input name="purchase_date" type="date"></label><label><span id="production-date-label">Bereid op</span><input name="production_date" type="date"></label>
     <label>Houdbaar tot / einddatum<input name="expiry_date" type="date"></label>
   </div>
-  <label>Bereidingswijze voor op het label<textarea name="preparation_instructions" rows="2" maxlength="220" placeholder="Bijvoorbeeld: 4–5 min. verwarmen in de magnetron en halverwege omscheppen"></textarea></label>
-  <div class="estimate-box"><button type="button" class="secondary" id="generate-preparation">✨ Bereidingswijze met Gemini maken</button><span id="preparation-result">Gebruikt de naam én ingrediënten; je kunt de tekst daarna aanpassen.</span></div>
+  <label>Bereidingswijze voor op het label<textarea name="preparation_instructions" rows="2" maxlength="220" placeholder="Bijvoorbeeld: Magnetron: 4–5 min op 700 W, halverwege omscheppen"></textarea></label>
+  <div class="estimate-box"><button type="button" class="secondary" id="generate-preparation">✨ Bereidingswijze met Gemini maken</button><span id="preparation-result">Gebruikt naam, ingrediënten én gewicht per bak; je kunt de tekst daarna aanpassen.</span></div>
   <div class="estimate-box"><button type="button" class="secondary" id="estimate-expiry">✨ Houdbaarheid bepalen</button><span id="estimate-result">Lokale regels worden eerst gebruikt.</span></div>
   <label class="checkline"><input name="remember_shelf" type="checkbox"> Deze aangepaste houdbaarheid onthouden voor dit product en deze locatie</label>
   <hr><div class="label-choice"><label class="checkline"><input name="create_label" type="checkbox" checked> Voor iedere bak een eigen label maken</label><label>Exemplaren per bak<input name="label_copies" type="number" min="1" max="99" value="1"></label></div>

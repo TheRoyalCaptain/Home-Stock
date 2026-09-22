@@ -38,19 +38,23 @@ class AuthenticationTest(unittest.TestCase):
 
     def test_gemini_preparation_uses_name_and_ingredients(self):
         raw = {"candidates":[{"content":{"parts":[{"text":json.dumps({
-            "instructions":"Verwarm rustig en roer halverwege door."})}]}}]}
+            "instructions":"Magnetron: 4-5 min op 700 W, halverwege omscheppen."})}]}}]}
         response = MagicMock()
         response.__enter__.return_value = io.BytesIO(json.dumps(raw).encode())
         with db() as c:
             c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('gemini_api_key','test-key')")
             with patch.object(app_module.urllib.request, "urlopen", return_value=response) as opened:
                 result = app_module.generate_preparation_gemini(
-                    c, "Vegetarische pasta", "pasta, tomaat en kaas")
+                    c, "Vegetarische pasta", "pasta, tomaat en kaas", 500)
             c.execute("DELETE FROM settings WHERE key='gemini_api_key'")
-        self.assertEqual(result, "Verwarm rustig en roer halverwege door.")
+        self.assertEqual(result, "Magnetron: 4-5 min op 700 W, halverwege omscheppen.")
         prompt = json.loads(opened.call_args.args[0].data)["contents"][0]["parts"][0]["text"]
         self.assertIn("Vegetarische pasta", prompt)
         self.assertIn("pasta, tomaat en kaas", prompt)
+        self.assertIn("tijdsduur", prompt)
+        self.assertIn("watt", prompt)
+        self.assertIn("°C", prompt)
+        self.assertIn("500 gram", prompt)
 
     def test_complete_security_flow(self):
         anon = app.test_client()
@@ -134,6 +138,7 @@ class AuthenticationTest(unittest.TestCase):
             created = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
                 "name":"Printproduct","quantity":1,"location_id":1,"create_label":True,
                 "product_type":"homemade","contents":"Pasta en groente",
+                "portion_grams":500,
                 "preparation_instructions":"Verwarm 4 minuten en roer halverwege door.",
                 "production_date":"2026-09-21","expiry_date":"2026-09-28"}).json
             self.assertRegex(created["short_code"], r"^PR\d{3}$")
@@ -147,6 +152,8 @@ class AuthenticationTest(unittest.TestCase):
             self.assertEqual(payload["lot_code"], created["lot_code"])
             self.assertEqual(payload["contents"], "Pasta en groente")
             self.assertEqual(payload["preparation_instructions"], "Verwarm 4 minuten en roer halverwege door.")
+            self.assertEqual(payload["portion_grams"], 500)
+            self.assertIn("500 g", payload["detail"])
             self.assertEqual(payload["production_date"], "2026-09-21")
             self.assertEqual(payload["placed_by"], "Kevin")
             self.assertEqual(payload["copies"], 1)
@@ -157,6 +164,7 @@ class AuthenticationTest(unittest.TestCase):
             batch = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
                 "name":"Vegetarische pasta","quantity":1,"container_count":3,
                 "unit":"bak","location_id":2,"create_label":True,
+                "portion_grams":450,
                 "product_type":"homemade","contents":"Pasta, tomaat en kaas",
                 "production_date":"2026-09-21","expiry_date":"2026-12-21"})
             self.assertEqual(batch.status_code, 201)
@@ -168,6 +176,7 @@ class AuthenticationTest(unittest.TestCase):
             detail = client.get(f"/api/products/{batch['id']}").json
             self.assertEqual(detail["product"]["stock"], 3)
             self.assertEqual([lot["quantity"] for lot in detail["lots"]], [1, 1, 1])
+            self.assertEqual([lot["portion_grams"] for lot in detail["lots"]], [450, 450, 450])
             self.assertEqual(client.get("/api/barcode/"+batch["lot_codes"][1]).json["lot"]["lot_id"], batch["lot_ids"][1])
 
             consumed = client.post(f"/api/lots/{batch['lot_ids'][0]}/action",
@@ -179,9 +188,11 @@ class AuthenticationTest(unittest.TestCase):
 
             extra = client.post(f"/api/products/{batch['id']}/lots",
                 headers={"X-CSRF-Token":csrf}, json={"quantity":1,"container_count":2,
-                    "unit":"bak","location_id":2,"create_labels":True}).json
+                    "unit":"bak","portion_grams":600,"location_id":2,"create_labels":True}).json
             self.assertEqual(extra["lot_codes"], [f"{batch['short_code']}-D", f"{batch['short_code']}-E"])
             self.assertEqual(len(extra["label_job_ids"]), 2)
+            detail = client.get(f"/api/products/{batch['id']}").json
+            self.assertEqual([lot["portion_grams"] for lot in detail["lots"][-2:]], [600, 600])
 
             with patch.object(app_module, "generate_preparation_gemini",
                               return_value="Verwarm goed en schep halverwege om."):
@@ -198,6 +209,31 @@ class AuthenticationTest(unittest.TestCase):
             self.assertEqual(decoded.json["codes"][0]["text"], batch["lot_codes"][1])
             self.assertEqual(client.post("/api/barcode/decode", headers={
                 "X-CSRF-Token":csrf,"Content-Type":"text/plain"}, data=b"x").status_code, 415)
+
+            last = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Laatste portie","quantity":1,"unit":"bak","location_id":1}).json
+            archived = client.post(f"/api/lots/{last['lot_id']}/action",
+                headers={"X-CSRF-Token":csrf}, json={"action":"consume","quantity":1,
+                    "archive_when_empty":True})
+            self.assertEqual(archived.status_code, 200)
+            self.assertTrue(archived.json["archived"])
+            self.assertNotIn(last["id"], [p["id"] for p in client.get("/api/products").json])
+            self.assertEqual(client.get(f"/api/products/{last['id']}").status_code, 200)
+            self.assertTrue(any(row["product_id"]==last["id"] and row["action"]=="consume"
+                                for row in client.get("/api/history").json))
+
+            restored = client.post(f"/api/products/{last['id']}/lots",
+                headers={"X-CSRF-Token":csrf}, json={"quantity":1,"location_id":1})
+            self.assertEqual(restored.status_code, 201)
+            self.assertIn(last["id"], [p["id"] for p in client.get("/api/products").json])
+
+            keep = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Op nul bewaren","quantity":1,"location_id":1}).json
+            kept = client.post(f"/api/lots/{keep['lot_id']}/action",
+                headers={"X-CSRF-Token":csrf}, json={"action":"waste","quantity":1,
+                    "archive_when_empty":False})
+            self.assertFalse(kept.json["archived"])
+            self.assertIn(keep["id"], [p["id"] for p in client.get("/api/products").json])
 
 
 if __name__ == "__main__":

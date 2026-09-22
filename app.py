@@ -21,7 +21,7 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"
 USER_AGENT = "HomeStock/0.3 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
@@ -247,7 +247,8 @@ def init_db():
           category TEXT NOT NULL DEFAULT '',barcode TEXT NOT NULL DEFAULT '',
           expiry_date TEXT,notes TEXT NOT NULL DEFAULT '',short_code TEXT,
           product_type TEXT NOT NULL DEFAULT 'store',contents TEXT NOT NULL DEFAULT '',
-          preparation_instructions TEXT NOT NULL DEFAULT '',
+          preparation_instructions TEXT NOT NULL DEFAULT '',portion_grams REAL,
+          is_archived INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS shopping_items(
@@ -268,7 +269,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS stock_lots(
           id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,
           location_id INTEGER NOT NULL,quantity REAL NOT NULL DEFAULT 0,
-          unit TEXT NOT NULL DEFAULT 'stuks',purchase_date TEXT,production_date TEXT,expiry_date TEXT,
+          unit TEXT NOT NULL DEFAULT 'stuks',portion_grams REAL,purchase_date TEXT,production_date TEXT,expiry_date TEXT,
           opened_at TEXT,unit_price REAL,store TEXT NOT NULL DEFAULT '',
           lot_code TEXT NOT NULL UNIQUE,created_by INTEGER,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -340,9 +341,12 @@ def init_db():
             "short_code TEXT", "product_type TEXT NOT NULL DEFAULT 'store'",
             "contents TEXT NOT NULL DEFAULT ''",
             "preparation_instructions TEXT NOT NULL DEFAULT ''",
+            "portion_grams REAL",
+            "is_archived INTEGER NOT NULL DEFAULT 0",
         ]:
             add_column(c, "products", definition)
         add_column(c,"stock_lots","production_date TEXT")
+        add_column(c,"stock_lots","portion_grams REAL")
         for existing in c.execute("SELECT id,name FROM products WHERE short_code IS NULL OR short_code='' ORDER BY id").fetchall():
             c.execute("UPDATE products SET short_code=? WHERE id=?",
                       (article_code(c,existing["name"]),existing["id"]))
@@ -423,18 +427,23 @@ def estimate_gemini(c, name, category, location_name, opened=False):
         raise RuntimeError(f"Gemini kon geen inschatting maken: {error}") from error
 
 
-def generate_preparation_gemini(c, name, contents):
+def generate_preparation_gemini(c, name, contents, portion_grams=None):
     api_key = setting(c, "gemini_api_key")
     if not api_key:
         raise RuntimeError("Configureer eerst je Gemini API-key bij Instellingen")
     model = setting(c, "gemini_model", "gemini-3.1-flash-lite")
+    grams = number(portion_grams, 0, 0)
+    portion_text = f"{grams:g} gram" if grams else "niet opgegeven"
     prompt = (
-        "Schrijf één ultrakorte Nederlandse bereidings- of opwarminstructie voor "
-        "een klein voedselbewaarlabel. Baseer die op zowel de naam als de opgegeven "
-        "ingrediënten. Wees conservatief en voedselveilig, verzin geen ontbrekende "
-        "apparaatstanden en gebruik maximaal 180 tekens. Als betrouwbare instructies "
-        "niet af te leiden zijn, zeg dan: Volg de bereidingswijze op de verpakking. "
-        f"Naam gerecht of product: {name}. Ingrediënten: {contents}."
+        "Schrijf één concrete, ultrakorte Nederlandse bereidings- of opwarminstructie "
+        "voor een klein voedselbewaarlabel. Baseer die op zowel de naam als de opgegeven "
+        "ingrediënten. Kies de meest geschikte methode. Noem altijd een tijdsduur én "
+        "óf een temperatuur in °C óf een magnetronvermogen in watt, bijvoorbeeld: "
+        "Magnetron: 4-5 min op 700 W, halverwege omscheppen. Wees conservatief en "
+        "voedselveilig en gebruik maximaal 180 tekens. Als een concrete instelling "
+        "niet veilig af te leiden is, zeg dan: Volg tijd en temperatuur op de verpakking. "
+        f"Naam gerecht of product: {name}. Ingrediënten: {contents}. "
+        f"Gewicht van één bak of portie: {portion_text}."
     )
     schema = {"type":"object","properties":{"instructions":{"type":"string"}},
               "required":["instructions"]}
@@ -456,7 +465,7 @@ def generate_preparation_gemini(c, name, contents):
         return instruction[:220]
     except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
             ValueError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"Gemini kon geen bereidingswijze maken: {error}") from error
+        raise RuntimeError(f"Gemini kon geen specifieke bereidingswijze maken: {error}") from error
 
 
 def open_food_facts(barcode):
@@ -488,7 +497,7 @@ def refresh_notifications(c):
     soon = (today+timedelta(days=warning)).isoformat()
     lots = c.execute("""SELECT l.*,p.name FROM stock_lots l
       JOIN products p ON p.id=l.product_id
-      WHERE l.quantity>0 AND l.expiry_date IS NOT NULL AND l.expiry_date<=?""",(soon,)).fetchall()
+      WHERE p.is_archived=0 AND l.quantity>0 AND l.expiry_date IS NOT NULL AND l.expiry_date<=?""",(soon,)).fetchall()
     for lot in lots:
         expired = lot["expiry_date"]<today.isoformat()
         c.execute("""INSERT OR IGNORE INTO notifications
@@ -500,7 +509,7 @@ def refresh_notifications(c):
            lot["product_id"],lot["id"],lot["expiry_date"],
            f"expiry:{lot['id']}:{lot['expiry_date']}"))
     lows = c.execute(product_query()+"""
-      GROUP BY p.id HAVING stock<=p.minimum AND p.minimum>0""").fetchall()
+      WHERE p.is_archived=0 GROUP BY p.id HAVING stock<=p.minimum AND p.minimum>0""").fetchall()
     for product in lows:
         c.execute("""INSERT OR IGNORE INTO notifications
           (type,title,message,product_id,due_at,dedupe_key)
@@ -544,14 +553,24 @@ def bootstrap():
 
 @app.get("/api/products")
 def products():
-    search=request.args.get("search","").strip()
-    sql=product_query(); values=[]
+    search=request.args.get("search","").strip();archived=1 if request.args.get("archived")=="1" else 0
+    sql=product_query()+" WHERE p.is_archived=?"; values=[archived]
     if search:
-        sql+=" WHERE p.name LIKE ? OR p.brand LIKE ? OR p.category LIKE ? OR b.barcode LIKE ? OR loc.name LIKE ?"
-        values=[f"%{search}%"]*5
+        sql+=" AND (p.name LIKE ? OR p.brand LIKE ? OR p.category LIKE ? OR b.barcode LIKE ? OR loc.name LIKE ?)"
+        values += [f"%{search}%"]*5
     sql+=" GROUP BY p.id ORDER BY p.name COLLATE NOCASE"
     with db() as c:
         return jsonify([dict(r) for r in c.execute(sql,values)])
+
+
+@app.post("/api/products/<int:product_id>/restore")
+def restore_product(product_id):
+    with db() as c:
+        if not c.execute("SELECT 1 FROM products WHERE id=?",(product_id,)).fetchone():
+            return jsonify(error="Product niet gevonden"),404
+        c.execute("UPDATE products SET is_archived=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                  (product_id,))
+    return jsonify(ok=True)
 
 
 @app.get("/api/products/<int:product_id>")
@@ -593,21 +612,23 @@ def create_product():
         pid=c.execute("""INSERT INTO products
           (name,unit,minimum,category,barcode,notes,brand,image_url,
            default_shelf_days,opened_shelf_days,short_code,product_type,contents,
-           preparation_instructions) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           preparation_instructions,portion_grams) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
           (name,str(p.get("unit") or "stuks"),number(p.get("minimum"),0,0),
            str(p.get("category") or ""),barcode,str(p.get("notes") or ""),
            str(p.get("brand") or ""),str(p.get("image_url") or ""),
            p.get("default_shelf_days") or None,p.get("opened_shelf_days") or None,
            short_code,product_type,str(p.get("contents") or ""),
-           str(p.get("preparation_instructions") or "")[:220])).lastrowid
+           str(p.get("preparation_instructions") or "")[:220],
+           number(p.get("portion_grams"),0,0) or None)).lastrowid
         if barcode:c.execute("INSERT INTO barcodes(product_id,barcode) VALUES(?,?)",(pid,barcode))
         lot_ids=[];lot_codes=[];job_ids=[]
         if quantity>0:
             for lot_code in container_codes(c,pid,short_code,containers):
                 lot_id=c.execute("""INSERT INTO stock_lots
-                  (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
-                   unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                  (pid,location_id,quantity,str(p.get("unit") or "stuks"),purchase,production,expiry,
+                  (product_id,location_id,quantity,unit,portion_grams,purchase_date,production_date,expiry_date,
+                   unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (pid,location_id,quantity,str(p.get("unit") or "stuks"),
+                   number(p.get("portion_grams"),0,0) or None,purchase,production,expiry,
                    number(p.get("unit_price"),0) or None,str(p.get("store") or ""),
                    lot_code,actor(p))).lastrowid
                 lot_ids.append(lot_id);lot_codes.append(lot_code)
@@ -632,11 +653,13 @@ def create_product():
 def update_product(product_id):
     p=body(); allowed=["name","unit","minimum","category","notes","brand",
                       "image_url","default_shelf_days","opened_shelf_days",
-                      "product_type","contents","preparation_instructions"]
+                      "product_type","contents","preparation_instructions","portion_grams"]
     fields={k:p[k] for k in allowed if k in p}
     if not fields:return jsonify(error="Geen wijzigingen"),400
     if "preparation_instructions" in fields:
         fields["preparation_instructions"]=str(fields["preparation_instructions"] or "")[:220]
+    if "portion_grams" in fields:
+        fields["portion_grams"]=number(fields["portion_grams"],0,0) or None
     if "product_type" in fields and fields["product_type"] not in {"store","homemade"}:
         return jsonify(error="Ongeldig producttype"),400
     with db() as c:
@@ -663,13 +686,15 @@ def add_lot(product_id):
         c.execute("BEGIN IMMEDIATE")
         product=c.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
         if not product:return jsonify(error="Product niet gevonden"),404
+        c.execute("UPDATE products SET is_archived=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",(product_id,))
         lot_ids=[];codes=[];job_ids=[]
         for code in container_codes(c,product_id,product["short_code"],containers):
             lot_id=c.execute("""INSERT INTO stock_lots
-              (product_id,location_id,quantity,unit,purchase_date,production_date,expiry_date,
-               unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+              (product_id,location_id,quantity,unit,portion_grams,purchase_date,production_date,expiry_date,
+               unit_price,store,lot_code,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
               (product_id,int(p.get("location_id") or 1),quantity,
                str(p.get("unit") or product["unit"]),
+               number(p.get("portion_grams"),product["portion_grams"] or 0,0) or None,
                iso_date(p.get("purchase_date")) or date.today().isoformat(),
                iso_date(p.get("production_date")),iso_date(p.get("expiry_date")),number(p.get("unit_price"),0) or None,
                str(p.get("store") or ""),code,actor(p))).lastrowid
@@ -726,7 +751,13 @@ def lot_action(lot_id):
           VALUES(?,?,?,?,?,?,?,?)""",
           (lot["product_id"],lot_id,actor(p),action,qty,lot["unit_price"],
            lot["store"],str(p.get("note") or "")))
-    return jsonify(ok=True,delta=delta)
+        remaining=c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots WHERE product_id=?",
+                            (lot["product_id"],)).fetchone()[0]
+        archived=bool(action in {"consume","waste"} and p.get("archive_when_empty") and remaining<=0.000001)
+        if archived:
+            c.execute("UPDATE products SET is_archived=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                      (lot["product_id"],))
+    return jsonify(ok=True,delta=delta,stock=remaining,archived=archived)
 
 
 @app.get("/api/barcode/<barcode>")
@@ -792,7 +823,7 @@ def preparation_instructions():
     if not name:return jsonify(error="Vul eerst de naam van het gerecht of product in"),400
     if not contents:return jsonify(error="Vul eerst de inhoud of ingrediënten in"),400
     try:
-        with db() as c:instruction=generate_preparation_gemini(c,name,contents)
+        with db() as c:instruction=generate_preparation_gemini(c,name,contents,p.get("portion_grams"))
     except RuntimeError as error:return jsonify(error=str(error)),502
     return jsonify(instructions=instruction,source="gemini")
 
@@ -849,12 +880,14 @@ def delete_location(location_id):
 def dashboard():
     with db() as c:
         refresh_notifications(c)
-        products_count=c.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-        units=c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots").fetchone()[0]
+        products_count=c.execute("SELECT COUNT(*) FROM products WHERE is_archived=0").fetchone()[0]
+        units=c.execute("""SELECT COALESCE(SUM(l.quantity),0) FROM stock_lots l
+          JOIN products p ON p.id=l.product_id WHERE p.is_archived=0""").fetchone()[0]
         expiring=c.execute("""SELECT COUNT(*) FROM stock_lots WHERE quantity>0
+          AND product_id IN (SELECT id FROM products WHERE is_archived=0)
           AND expiry_date IS NOT NULL AND expiry_date<=date('now','+7 day')""").fetchone()[0]
         low=c.execute("""SELECT COUNT(*) FROM ("""+product_query()+"""
-          GROUP BY p.id HAVING stock<=p.minimum AND p.minimum>0)""").fetchone()[0]
+          WHERE p.is_archived=0 GROUP BY p.id HAVING stock<=p.minimum AND p.minimum>0)""").fetchone()[0]
         recent=[dict(r) for r in c.execute("""SELECT t.*,p.name,pr.name profile_name
           FROM stock_transactions t JOIN products p ON p.id=t.product_id
           LEFT JOIN profiles pr ON pr.id=t.profile_id
@@ -925,7 +958,7 @@ def shopping():
         manual=[dict(r) for r in c.execute(
           "SELECT *,0 automatic FROM shopping_items ORDER BY checked,name")]
         automatic=[dict(r) for r in c.execute(product_query()+
-          " GROUP BY p.id HAVING stock<=p.minimum AND p.minimum>0 ORDER BY p.name")]
+          " WHERE p.is_archived=0 GROUP BY p.id HAVING stock<=p.minimum AND p.minimum>0 ORDER BY p.name")]
     auto=[{"product_id":r["id"],"name":r["name"],
            "quantity":max(r["minimum"]-r["stock"],1),"unit":r["unit"],
            "checked":0,"automatic":1} for r in automatic]
@@ -960,7 +993,8 @@ def delete_shopping(item_id):
 def labels():
     with db() as c:
         rows=[dict(r) for r in c.execute("""SELECT j.*,p.name,p.brand,p.category,p.unit,
-          p.short_code,p.product_type,p.contents,p.preparation_instructions,l.quantity,l.purchase_date,
+          p.short_code,p.product_type,p.contents,p.preparation_instructions,l.quantity,
+          COALESCE(l.portion_grams,p.portion_grams) portion_grams,l.purchase_date,
           l.production_date,l.expiry_date,l.lot_code,loc.name location,
           pr.name placed_by
           FROM label_jobs j JOIN products p ON p.id=j.product_id
@@ -998,7 +1032,8 @@ def update_label(job_id):
 
 def label_for_print(c, job_id):
     return c.execute("""SELECT j.*,p.name,p.brand,p.category,p.unit,p.short_code,p.product_type,
-      p.contents,p.preparation_instructions,l.quantity,l.purchase_date,l.production_date,l.expiry_date,
+      p.contents,p.preparation_instructions,l.quantity,
+      COALESCE(l.portion_grams,p.portion_grams) portion_grams,l.purchase_date,l.production_date,l.expiry_date,
       l.lot_code,loc.name location,pr.name placed_by FROM label_jobs j
       JOIN products p ON p.id=j.product_id
       LEFT JOIN stock_lots l ON l.id=j.lot_id
@@ -1032,10 +1067,12 @@ def print_server_label(job_id):
         job=label_for_print(c,job_id)
         if not job:return jsonify(error="Label niet gevonden"),404
         printer=setting(c,"default_printer","")
-        detail=f"{number(job['quantity']):g} {job['unit']}"
+        grams=f" · {number(job['portion_grams']):g} g" if job["portion_grams"] else ""
+        detail=f"{number(job['quantity']):g} {job['unit']}{grams}"
         payload={"printer":printer,"name":job["name"],"detail":detail,
           "short_code":job["short_code"],"lot_code":job["lot_code"],"product_type":job["product_type"],
           "contents":job["contents"],"preparation_instructions":job["preparation_instructions"],
+          "portion_grams":job["portion_grams"],
           "brand":job["brand"],"category":job["category"],
           "location":job["location"],
           "production_date":job["production_date"],"purchase_date":job["purchase_date"],
@@ -1196,7 +1233,7 @@ def export_csv():
             "locations","barcodes","next_expiry"]
     writer=csv.DictWriter(output,fieldnames=fields);writer.writeheader()
     with db() as c:
-        for row in c.execute(product_query()+" GROUP BY p.id ORDER BY p.name"):
+        for row in c.execute(product_query()+" WHERE p.is_archived=0 GROUP BY p.id ORDER BY p.name"):
             writer.writerow({field:row[field] for field in fields})
     return Response(output.getvalue(),mimetype="text/csv",
       headers={"Content-Disposition":"attachment; filename=home-stock-v0.2.csv"})
