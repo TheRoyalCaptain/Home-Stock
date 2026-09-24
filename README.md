@@ -12,6 +12,7 @@ een DYMO LabelWriter.
 - Zelf eigen locaties toevoegen
 - Meerdere bakken in één keer invoeren met codes als `VP001-A` en `VP001-B`
 - Iedere bak afzonderlijk verbruiken, verspillen, openen of verplaatsen
+- Alle gegevens van een losse bak corrigeren en volledig terugdraaien
 - Voorraadacties veilig terugdraaien vanuit de activiteitshistorie
 - Verlopen voorraad in één keer opruimen en desgewenst terugzetten
 - Winkelbarcodes opzoeken via Open Food Facts
@@ -22,7 +23,9 @@ een DYMO LabelWriter.
 - Optionele Gemini Free Tier-inschatting als lokale regels niet voldoen
 - Verbruik, verspilling, prijzen, winkels en statistieken
 - Boodschappenlijst, recepten en maaltijdplanner
+- Bewerkbare recepten en automatisch ontbrekende ingrediënten bij maaltijdplanning
 - Meerdere gebruikers met activiteitshistorie
+- Accounts uitschakelen en tijdelijke wachtwoorden veilig opnieuw instellen
 - Houdbaarheids- en minimumvoorraadmeldingen
 - CSV-export en JSON-back-up
 - Direct printen op een USB-aangesloten DYMO LabelWriter 400/450
@@ -119,6 +122,21 @@ is. Stel bij TLS via een reverse proxy `HOME_STOCK_SECURE_COOKIE=1` in voor de
 webcontainer.
 
 ## Versiegeschiedenis
+
+### v0.11.0
+
+- Locatiekaarten op het dashboard met aantallen, voorraad en verlopen partijen
+- Voorraad sorteren op einddatum, naam of hoeveelheid
+- Hoeveelheid, gewicht, locatie, datums, prijs en winkel per losse bak bewerken
+- Partijbewerkingen volledig terugdraaien via de activiteitshistorie
+- Product verwijderen vervangen door veilig archiveren met behoud van alle gegevens
+- Recepten bekijken en achteraf aanpassen
+- Maaltijdplanning kan ontbrekende ingrediënten direct op de boodschappenlijst zetten
+- Gelijke boodschappen worden samengevoegd en afgevinkte items kunnen samen worden gewist
+- Meldingen openen rechtstreeks het bijbehorende product
+- Accounts uitschakelen, opnieuw inschakelen en een verplicht tijdelijk wachtwoord geven
+- Scanner beschermd tegen dubbele herkenning van dezelfde cameraframe
+- Verdere verbeteringen voor smalle iPhone-schermen en mobiele detailvensters
 
 ### v0.10.0
 

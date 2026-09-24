@@ -5,7 +5,9 @@
 <body class="standalone-body"><main class="standalone-main">
 <div class="standalone-head"><div><span class="eyebrow">BEHEER</span><h1>Gebruikers beheren</h1><p>Accounts en toegangsrechten voor Home Stock.</p></div><a class="secondary" href="/">← Terug naar Home Stock</a></div>
 <section class="panel"><h2>Accounts</h2>
-{% for user in users %}<div class="list-row"><div class="list-main"><b>{{ user.username }}</b><small>{{ 'Beheerder' if user.role == 'admin' else 'Gebruiker' }} · {{ 'Wachtwoordwijziging vereist' if user.must_change else 'Actief' }}</small></div></div>{% endfor %}
+{% if request.args.get('reset') %}<p role="status">Tijdelijk wachtwoord ingesteld. De gebruiker moet dit na de volgende login wijzigen.</p>{% endif %}
+{% for user in users %}<div class="user-row"><div class="list-row"><span class="status-dot {{ 'online' if user.active else '' }}"></span><div class="list-main"><b>{{ user.username }}</b><small>{{ 'Beheerder' if user.role == 'admin' else 'Gebruiker' }} · {{ 'Uitgeschakeld' if not user.active else ('Wachtwoordwijziging vereist' if user.must_change else 'Actief') }}</small></div><form method="post" action="/account/users/{{ user.id }}/toggle"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary">{{ 'Uitschakelen' if user.active else 'Inschakelen' }}</button></form></div>
+<details><summary>Tijdelijk wachtwoord instellen</summary><form method="post" action="/account/users/{{ user.id }}/reset" class="reset-user-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Nieuw tijdelijk wachtwoord<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><button class="primary">Instellen en sessies uitloggen</button></form></details></div>{% endfor %}
 </section>
 <section class="panel" style="margin-top:20px"><h2>Gebruiker toevoegen</h2>
 <p>Beide rollen kunnen de gezamenlijke voorraad beheren. Alleen beheerders kunnen accounts aanmaken en systeeminstellingen wijzigen.</p>

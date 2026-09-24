@@ -111,9 +111,25 @@ class AuthenticationTest(unittest.TestCase):
         self.assertEqual(created.status_code, 201)
         with db() as c:
             profile = c.execute("SELECT profile_id FROM auth_users WHERE username='simon'").fetchone()[0]
+            member_id = c.execute("SELECT id FROM auth_users WHERE username='simon'").fetchone()[0]
             self.assertEqual(c.execute("SELECT profile_id FROM stock_transactions ORDER BY id DESC").fetchone()[0], profile)
             self.assertTrue(c.execute("SELECT password_hash FROM auth_users LIMIT 1").fetchone()[0].startswith("scrypt:"))
-        self.assertEqual(member.post("/logout", data={"csrf_token":csrf}).status_code, 302)
+        admin_csrf = re.search(r'name="csrf-token" content="([^"]+)"', admin.get("/").text)[1]
+        self.assertEqual(admin.post(f"/account/users/{member_id}/toggle",
+            data={"csrf_token":admin_csrf}).status_code, 302)
+        self.assertEqual(member.get("/api/products").status_code, 401)
+        self.assertEqual(admin.post(f"/account/users/{member_id}/toggle",
+            data={"csrf_token":admin_csrf}).status_code, 302)
+        self.assertEqual(admin.post(f"/account/users/{member_id}/reset", data={
+            "csrf_token":admin_csrf,"password":"Fresh temporary password!"}).status_code, 302)
+        renewed = app.test_client()
+        self.assertEqual(self.login(renewed, "simon", "Fresh temporary password!").status_code, 302)
+        self.assertEqual(renewed.get("/").location, "/account/password")
+        renewed_csrf = self.token(renewed, "/account/password")
+        self.assertEqual(self.change(renewed, "Fresh temporary password!",
+                                     "Final unique passphrase!").status_code, 302)
+        csrf = re.search(r'name="csrf-token" content="([^"]+)"', renewed.get("/").text)[1]
+        self.assertEqual(renewed.post("/logout", data={"csrf_token":csrf}).status_code, 302)
         self.assertEqual(member.get("/api/products").status_code, 401)
         blocked = app.test_client()
         for _ in range(5):
@@ -285,6 +301,61 @@ class AuthenticationTest(unittest.TestCase):
             settings = client.get("/api/bootstrap").json["settings"]
             self.assertEqual(settings["notifications_enabled"], "0")
             self.assertEqual(settings["notification_time"], "18:30")
+
+            # Lot metadata is editable and the complete previous state is restorable.
+            editable = client.post("/api/products", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Bewerkbare bak","quantity":1,"unit":"bak","location_id":1,
+                "portion_grams":400,"expiry_date":"2026-10-01"}).json
+            edited = client.put(f"/api/lots/{editable['lot_id']}",
+                headers={"X-CSRF-Token":csrf}, json={"quantity":2,"unit":"bak",
+                    "portion_grams":550,"location_id":2,"purchase_date":"2026-09-24",
+                    "production_date":"2026-09-23","expiry_date":"2026-12-01",
+                    "unit_price":3.5,"store":"Testwinkel"})
+            self.assertEqual(edited.status_code, 200)
+            changed_lot = client.get(f"/api/products/{editable['id']}").json["lots"][0]
+            self.assertEqual(changed_lot["quantity"], 2)
+            self.assertEqual(changed_lot["portion_grams"], 550)
+            self.assertEqual(changed_lot["location_id"], 2)
+            self.assertEqual(client.post(f"/api/history/{edited.json['transaction_id']}/undo",
+                headers={"X-CSRF-Token":csrf}, json={}).status_code, 200)
+            restored_lot = client.get(f"/api/products/{editable['id']}").json["lots"][0]
+            self.assertEqual(restored_lot["quantity"], 1)
+            self.assertEqual(restored_lot["portion_grams"], 400)
+            self.assertEqual(restored_lot["location_id"], 1)
+
+            # Archiving is non-destructive and preserves product history.
+            self.assertEqual(client.delete(f"/api/products/{editable['id']}",
+                headers={"X-CSRF-Token":csrf}).status_code, 200)
+            self.assertNotIn(editable["id"], [p["id"] for p in client.get("/api/products").json])
+            self.assertTrue(any(row["product_id"] == editable["id"]
+                                for row in client.get("/api/history").json))
+            self.assertEqual(client.post(f"/api/products/{editable['id']}/restore",
+                headers={"X-CSRF-Token":csrf}, json={}).status_code, 200)
+
+            # Recipes can be edited and meal planning can add missing ingredients.
+            recipe = client.post("/api/recipes", headers={"X-CSRF-Token":csrf}, json={
+                "name":"Pasta test","servings":2,"prep_minutes":15,"emoji":"🍝",
+                "instructions":"Koken","items":[{"ingredient":"Tomaat",
+                    "amount":4,"unit":"stuks"}]}).json
+            updated = client.put(f"/api/recipes/{recipe['id']}",
+                headers={"X-CSRF-Token":csrf}, json={"name":"Pasta vernieuwd",
+                    "servings":2,"prep_minutes":20,"emoji":"🍝","instructions":"20 min koken",
+                    "items":[{"ingredient":"Tomaat","amount":6,"unit":"stuks"}]})
+            self.assertEqual(updated.status_code, 200)
+            self.assertEqual(next(r for r in client.get("/api/recipes").json
+                                  if r["id"] == recipe["id"])["name"], "Pasta vernieuwd")
+            planned = client.post("/api/meal-plan", headers={"X-CSRF-Token":csrf}, json={
+                "plan_date":"2026-09-25","meal":"avondeten","recipe_id":recipe["id"],
+                "servings":2,"add_to_shopping":True})
+            self.assertEqual(planned.status_code, 201)
+            self.assertEqual(planned.json["shopping_added"], 1)
+            manual = next(i for i in client.get("/api/shopping").json if not i["automatic"])
+            self.assertEqual(client.patch(f"/api/shopping/{manual['id']}",
+                headers={"X-CSRF-Token":csrf}, json={"checked":True}).status_code, 204)
+            cleared = client.delete("/api/shopping/checked",headers={"X-CSRF-Token":csrf})
+            self.assertEqual(cleared.status_code, 200)
+            self.assertGreaterEqual(cleared.json["deleted"], 1)
+            self.assertTrue(client.get("/api/dashboard").json["locations"])
 
 
 if __name__ == "__main__":

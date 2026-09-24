@@ -25,6 +25,9 @@ def install_auth(app, db):
           CREATE TABLE IF NOT EXISTS auth_attempts (
             bucket TEXT PRIMARY KEY, attempts INTEGER NOT NULL, reset_at REAL NOT NULL);
         """)
+        columns={row[1] for row in c.execute("PRAGMA table_info(auth_users)")}
+        if "active" not in columns:
+            c.execute("ALTER TABLE auth_users ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
         c.execute("""INSERT OR IGNORE INTO auth_users
             (id,username,password_hash,must_change,role,profile_id)
             VALUES (1,'admin',?,1,'admin',1)""", (default_hash,))
@@ -67,7 +70,7 @@ def install_auth(app, db):
                     g.auth_session = dict(row)
                     if row["user_id"]:
                         user = c.execute("SELECT * FROM auth_users WHERE id=?", (row["user_id"],)).fetchone()
-                        g.auth_user = dict(user) if user else None
+                        g.auth_user = dict(user) if user and user["active"] else None
         public = request.endpoint in {"login", "static", "health", "service_worker"}
         if not public and not g.auth_user:
             return failure("Log opnieuw in om verder te gaan.", 401) if request.path.startswith("/api/") else redirect("/login")
@@ -142,7 +145,7 @@ def install_auth(app, db):
                 with db() as c:
                     user = c.execute("SELECT * FROM auth_users WHERE username=?", (username,)).fetchone()
                 valid = len(password) <= 256 and check_password_hash(user["password_hash"] if user else default_hash, password)
-                if user and valid:
+                if user and user["active"] and valid:
                     with db() as c:
                         # Also enforce the change if a legacy record still uses admin.
                         if check_password_hash(user["password_hash"], "admin"):
@@ -221,5 +224,35 @@ def install_auth(app, db):
                             VALUES (?,?,1,?,?)""", (username, hashed, role, profile))
                         return redirect("/account/users?created=1")
         with db() as c:
-            users = c.execute("SELECT username,role,must_change FROM auth_users ORDER BY username").fetchall()
+            users = c.execute("SELECT id,username,role,must_change,active FROM auth_users ORDER BY username").fetchall()
         return render_template("users.html", users=users, error=error), status
+
+    @app.post("/account/users/<int:user_id>/toggle")
+    def toggle_user(user_id):
+        if user_id == g.auth_user["id"]:
+            return render_template("auth.html", mode="error",
+                                   error="Je kunt je eigen account niet uitschakelen."),400
+        with db() as c:
+            user=c.execute("SELECT * FROM auth_users WHERE id=?",(user_id,)).fetchone()
+            if not user:return render_template("auth.html",mode="error",error="Account niet gevonden."),404
+            if user["active"] and user["role"]=="admin":
+                admins=c.execute("SELECT COUNT(*) FROM auth_users WHERE role='admin' AND active=1").fetchone()[0]
+                if admins<=1:return render_template("auth.html",mode="error",error="Er moet minimaal één actieve beheerder blijven."),400
+            active=0 if user["active"] else 1
+            c.execute("UPDATE auth_users SET active=? WHERE id=?",(active,user_id))
+            if not active:c.execute("DELETE FROM auth_sessions WHERE user_id=?",(user_id,))
+        return redirect("/account/users")
+
+    @app.post("/account/users/<int:user_id>/reset")
+    def reset_user_password(user_id):
+        password=request.form.get("password","")
+        if not 12<=len(password)<=256 or password.strip().lower()=="admin":
+            return render_template("auth.html",mode="error",
+                                   error="Gebruik een tijdelijk wachtwoord van 12 tot 256 tekens."),400
+        with db() as c:
+            if not c.execute("SELECT 1 FROM auth_users WHERE id=?",(user_id,)).fetchone():
+                return render_template("auth.html",mode="error",error="Account niet gevonden."),404
+            c.execute("UPDATE auth_users SET password_hash=?,must_change=1,active=1 WHERE id=?",
+                      (generate_password_hash(password,method="scrypt"),user_id))
+            c.execute("DELETE FROM auth_sessions WHERE user_id=?",(user_id,))
+        return redirect("/account/users?reset=1")

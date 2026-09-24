@@ -23,8 +23,8 @@ app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.10.0"
-USER_AGENT = "HomeStock/0.10 (https://github.com/TheRoyalCaptain/Home-Stock)"
+APP_VERSION = "0.11.0"
+USER_AGENT = "HomeStock/0.11 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
 
@@ -167,6 +167,35 @@ def actor(payload=None):
         return g.auth_user["profile_id"]
     payload = payload or {}
     return int(payload.get("profile_id") or request.headers.get("X-Profile-Id") or 1)
+
+
+def lot_snapshot(lot, product_archived=0):
+    """Fields required to restore any editable lot mutation."""
+    return json.dumps({
+        "quantity": lot["quantity"], "location_id": lot["location_id"],
+        "opened_at": lot["opened_at"], "expiry_date": lot["expiry_date"],
+        "purchase_date": lot["purchase_date"], "production_date": lot["production_date"],
+        "portion_grams": lot["portion_grams"], "unit_price": lot["unit_price"],
+        "store": lot["store"], "unit": lot["unit"],
+        "product_archived": product_archived,
+    })
+
+
+def upsert_shopping_item(connection, name, quantity, unit="stuks", product_id=None):
+    """Combine equal unchecked items instead of creating duplicate rows."""
+    if product_id:
+        existing=connection.execute("""SELECT id FROM shopping_items
+          WHERE checked=0 AND product_id=? AND unit=? LIMIT 1""",(product_id,unit)).fetchone()
+    else:
+        existing=connection.execute("""SELECT id FROM shopping_items
+          WHERE checked=0 AND product_id IS NULL AND name=? COLLATE NOCASE AND unit=? LIMIT 1""",
+          (name,unit)).fetchone()
+    if existing:
+        connection.execute("UPDATE shopping_items SET quantity=quantity+? WHERE id=?",
+                           (quantity,existing["id"]))
+        return existing["id"]
+    return connection.execute("""INSERT INTO shopping_items(name,quantity,unit,product_id)
+      VALUES(?,?,?,?)""",(name,quantity,unit,product_id)).lastrowid
 
 
 def product_query():
@@ -701,8 +730,12 @@ def update_product(product_id):
 
 @app.delete("/api/products/<int:product_id>")
 def delete_product(product_id):
-    with db() as c:c.execute("DELETE FROM products WHERE id=?",(product_id,))
-    return "",204
+    with db() as c:
+        if not c.execute("SELECT 1 FROM products WHERE id=?",(product_id,)).fetchone():
+            return jsonify(error="Product niet gevonden"),404
+        c.execute("UPDATE products SET is_archived=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                  (product_id,))
+    return jsonify(ok=True)
 
 
 @app.post("/api/products/<int:product_id>/lots")
@@ -743,6 +776,45 @@ def add_lot(product_id):
         label_job_ids=job_ids),201
 
 
+@app.put("/api/lots/<int:lot_id>")
+def update_lot(lot_id):
+    p=body()
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        lot=c.execute("SELECT * FROM stock_lots WHERE id=?",(lot_id,)).fetchone()
+        if not lot:return jsonify(error="Partij niet gevonden"),404
+        product=c.execute("SELECT is_archived FROM products WHERE id=?",
+                          (lot["product_id"],)).fetchone()
+        location_id=int(p.get("location_id") or lot["location_id"])
+        if not c.execute("SELECT 1 FROM locations WHERE id=?",(location_id,)).fetchone():
+            return jsonify(error="Locatie niet gevonden"),400
+        undo_data=lot_snapshot(lot,product["is_archived"])
+        quantity=number(p.get("quantity"),lot["quantity"],0)
+        portion=(number(p.get("portion_grams"),0,0) or None) if "portion_grams" in p else lot["portion_grams"]
+        purchase=iso_date(p.get("purchase_date")) if "purchase_date" in p else lot["purchase_date"]
+        production=iso_date(p.get("production_date")) if "production_date" in p else lot["production_date"]
+        expiry=iso_date(p.get("expiry_date")) if "expiry_date" in p else lot["expiry_date"]
+        unit_price=(number(p.get("unit_price"),0) or None) if "unit_price" in p else lot["unit_price"]
+        store=str(p.get("store") or "") if "store" in p else lot["store"]
+        c.execute("""UPDATE stock_lots SET location_id=?,quantity=?,unit=?,portion_grams=?,
+          purchase_date=?,production_date=?,expiry_date=?,unit_price=?,store=?,
+          updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+          (location_id,quantity,str(p.get("unit") or lot["unit"]),
+           portion,purchase,production,expiry,unit_price,store,lot_id))
+        transaction_id=c.execute("""INSERT INTO stock_transactions
+          (product_id,lot_id,profile_id,action,quantity,unit_price,store,note,undo_data)
+          VALUES(?,?,?,'edit',0,?,?,?,?)""",
+          (lot["product_id"],lot_id,actor(p),unit_price,store,
+           str(p.get("note") or "Partijgegevens bijgewerkt"),
+           undo_data)).lastrowid
+        remaining=c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots WHERE product_id=?",
+                            (lot["product_id"],)).fetchone()[0]
+        c.execute("UPDATE products SET is_archived=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                  (int(remaining<=.000001),lot["product_id"]))
+        c.execute("DELETE FROM notifications WHERE lot_id=?",(lot_id,))
+    return jsonify(ok=True,transaction_id=transaction_id,stock=remaining)
+
+
 @app.post("/api/lots/<int:lot_id>/action")
 def lot_action(lot_id):
     p=body(); action=str(p.get("action") or "consume")
@@ -753,9 +825,7 @@ def lot_action(lot_id):
         if not lot:return jsonify(error="Partij niet gevonden"),404
         product_archived=c.execute("SELECT is_archived FROM products WHERE id=?",
                                    (lot["product_id"],)).fetchone()[0]
-        undo_data=json.dumps({"quantity":lot["quantity"],"location_id":lot["location_id"],
-          "opened_at":lot["opened_at"],"expiry_date":lot["expiry_date"],
-          "product_archived":product_archived})
+        undo_data=lot_snapshot(lot,product_archived)
         qty=number(p.get("quantity"),1,0); delta=0
         if action in {"consume","waste"}:
             qty=min(qty,lot["quantity"]);delta=-qty
@@ -844,9 +914,7 @@ def consume_barcode(barcode):
                   (product["id"],)).fetchone()
         if not lot:return jsonify(error="Geen beschikbare voorraad voor deze code"),404
         quantity=lot["quantity"] if exact else min(number(p.get("quantity"),1,.001),lot["quantity"])
-        undo_data=json.dumps({"quantity":lot["quantity"],"location_id":lot["location_id"],
-          "opened_at":lot["opened_at"],"expiry_date":lot["expiry_date"],
-          "product_archived":lot["is_archived"]})
+        undo_data=lot_snapshot(lot,lot["is_archived"])
         c.execute("UPDATE stock_lots SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                   (quantity,lot["id"]))
         transaction_id=c.execute("""INSERT INTO stock_transactions
@@ -1022,8 +1090,16 @@ def dashboard():
         recent=[dict(r) for r in c.execute("""SELECT t.*,p.name,pr.name profile_name
           FROM stock_transactions t JOIN products p ON p.id=t.product_id
           LEFT JOIN profiles pr ON pr.id=t.profile_id
-          ORDER BY t.created_at DESC LIMIT 8""")]
-    return jsonify(products=products_count,units=units,expiring=expiring,low=low,recent=recent)
+          WHERE t.undone_at IS NULL ORDER BY t.created_at DESC LIMIT 8""")]
+        locations=[dict(r) for r in c.execute("""SELECT loc.id,loc.name,loc.emoji,
+          COUNT(DISTINCT CASE WHEN l.quantity>0 AND p.is_archived=0 THEN p.id END) products,
+          COALESCE(SUM(CASE WHEN p.is_archived=0 THEN l.quantity ELSE 0 END),0) quantity,
+          COUNT(CASE WHEN l.quantity>0 AND p.is_archived=0 AND l.expiry_date<date('now') THEN 1 END) expired
+          FROM locations loc LEFT JOIN stock_lots l ON l.location_id=loc.id
+          LEFT JOIN products p ON p.id=l.product_id GROUP BY loc.id
+          ORDER BY loc.is_fixed DESC,loc.name""")]
+    return jsonify(products=products_count,units=units,expiring=expiring,low=low,
+                   recent=recent,locations=locations)
 
 
 @app.get("/api/stats")
@@ -1077,16 +1153,20 @@ def undo_transaction(transaction_id):
         tx=c.execute("SELECT * FROM stock_transactions WHERE id=?",(transaction_id,)).fetchone()
         if not tx:return jsonify(error="Activiteit niet gevonden"),404
         if tx["undone_at"]:return jsonify(error="Deze activiteit is al teruggedraaid"),409
-        if tx["action"] not in {"consume","waste","adjust","open","move"} or not tx["undo_data"]:
+        if tx["action"] not in {"consume","waste","adjust","open","move","edit"} or not tx["undo_data"]:
             return jsonify(error="Deze activiteit kan niet worden teruggedraaid"),400
         if c.execute("""SELECT 1 FROM stock_transactions WHERE lot_id=? AND id>? AND undone_at IS NULL
           LIMIT 1""",(tx["lot_id"],transaction_id)).fetchone():
             return jsonify(error="Draai eerst de nieuwere activiteit van deze partij terug"),409
         previous=json.loads(tx["undo_data"])
         c.execute("""UPDATE stock_lots SET quantity=?,location_id=?,opened_at=?,expiry_date=?,
+          purchase_date=?,production_date=?,portion_grams=?,unit_price=?,store=?,unit=?,
           updated_at=CURRENT_TIMESTAMP WHERE id=?""",
           (previous["quantity"],previous["location_id"],previous["opened_at"],
-           previous["expiry_date"],tx["lot_id"]))
+           previous["expiry_date"],previous.get("purchase_date"),previous.get("production_date"),
+           previous.get("portion_grams"),previous.get("unit_price"),previous.get("store", ""),
+           previous.get("unit") or c.execute("SELECT unit FROM stock_lots WHERE id=?",
+                                             (tx["lot_id"],)).fetchone()[0],tx["lot_id"]))
         c.execute("UPDATE products SET is_archived=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                   (previous.get("product_archived",0),tx["product_id"]))
         c.execute("UPDATE stock_transactions SET undone_at=CURRENT_TIMESTAMP WHERE id=?",(transaction_id,))
@@ -1103,9 +1183,7 @@ def cleanup_expired():
           ON p.id=l.product_id WHERE p.is_archived=0 AND l.quantity>0
           AND l.expiry_date IS NOT NULL AND l.expiry_date<?""",(today,)).fetchall()
         for lot in lots:
-            undo_data=json.dumps({"quantity":lot["quantity"],"location_id":lot["location_id"],
-              "opened_at":lot["opened_at"],"expiry_date":lot["expiry_date"],
-              "product_archived":lot["is_archived"]})
+            undo_data=lot_snapshot(lot,lot["is_archived"])
             c.execute("UPDATE stock_lots SET quantity=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",(lot["id"],))
             c.execute("""INSERT INTO stock_transactions
               (product_id,lot_id,profile_id,action,quantity,unit_price,store,note,undo_data)
@@ -1118,7 +1196,7 @@ def cleanup_expired():
                          (product_id,)).fetchone()[0]<=.000001:
                 c.execute("UPDATE products SET is_archived=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                           (product_id,))
-        c.execute("DELETE FROM notifications WHERE type='expiry' AND due_at<?",(today,))
+        c.execute("DELETE FROM notifications WHERE type IN ('expired','expiring') AND due_at<?",(today,))
     return jsonify(ok=True,lots=lots_done,products=len(products))
 
 
@@ -1155,9 +1233,8 @@ def add_shopping():
     p=body();name=str(p.get("name") or "").strip()
     if not name:return jsonify(error="Naam is verplicht"),400
     with db() as c:
-        new_id=c.execute("""INSERT INTO shopping_items(name,quantity,unit,product_id)
-          VALUES(?,?,?,?)""",(name,number(p.get("quantity"),1,.01),
-          str(p.get("unit") or "stuks"),p.get("product_id") or None)).lastrowid
+        new_id=upsert_shopping_item(c,name,number(p.get("quantity"),1,.01),
+          str(p.get("unit") or "stuks"),p.get("product_id") or None)
     return jsonify(id=new_id),201
 
 
@@ -1172,6 +1249,14 @@ def update_shopping(item_id):
 def delete_shopping(item_id):
     with db() as c:c.execute("DELETE FROM shopping_items WHERE id=?",(item_id,))
     return "",204
+
+
+@app.delete("/api/shopping/checked")
+def delete_checked_shopping():
+    with db() as c:
+        count=c.execute("SELECT COUNT(*) FROM shopping_items WHERE checked=1").fetchone()[0]
+        c.execute("DELETE FROM shopping_items WHERE checked=1")
+    return jsonify(ok=True,deleted=count)
 
 
 @app.get("/api/labels")
@@ -1305,11 +1390,36 @@ def create_recipe():
           (name,int(p.get("servings") or 2),str(p.get("instructions") or ""),
            int(p.get("prep_minutes") or 0),str(p.get("emoji") or "🍽️"))).lastrowid
         for item in p.get("items",[]):
+            ingredient=str(item.get("ingredient") or "").strip()
+            if not ingredient:continue
             c.execute("""INSERT INTO recipe_items
               (recipe_id,product_id,ingredient,amount,unit) VALUES(?,?,?,?,?)""",
-              (rid,item.get("product_id") or None,str(item.get("ingredient") or ""),
+              (rid,item.get("product_id") or None,ingredient,
                number(item.get("amount"),1,.01),str(item.get("unit") or "stuks")))
     return jsonify(id=rid),201
+
+
+@app.put("/api/recipes/<int:recipe_id>")
+def update_recipe(recipe_id):
+    p=body();name=str(p.get("name") or "").strip()
+    if not name:return jsonify(error="Naam is verplicht"),400
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        if not c.execute("SELECT 1 FROM recipes WHERE id=?",(recipe_id,)).fetchone():
+            return jsonify(error="Recept niet gevonden"),404
+        c.execute("""UPDATE recipes SET name=?,servings=?,instructions=?,prep_minutes=?,emoji=?,
+          updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+          (name,int(p.get("servings") or 2),str(p.get("instructions") or ""),
+           int(p.get("prep_minutes") or 0),str(p.get("emoji") or "🍽️"),recipe_id))
+        c.execute("DELETE FROM recipe_items WHERE recipe_id=?",(recipe_id,))
+        for item in p.get("items",[]):
+            ingredient=str(item.get("ingredient") or "").strip()
+            if not ingredient:continue
+            c.execute("""INSERT INTO recipe_items
+              (recipe_id,product_id,ingredient,amount,unit) VALUES(?,?,?,?,?)""",
+              (recipe_id,item.get("product_id") or None,ingredient,
+               number(item.get("amount"),1,.01),str(item.get("unit") or "stuks")))
+    return jsonify(ok=True)
 
 
 @app.delete("/api/recipes/<int:recipe_id>")
@@ -1333,9 +1443,7 @@ def recipe_shopping(recipe_id):
                   WHERE product_id=?""",(item["product_id"],)).fetchone()[0]
             needed=item["amount"]*factor
             if stock<needed:
-                c.execute("""INSERT INTO shopping_items(name,quantity,unit,product_id)
-                  VALUES(?,?,?,?)""",(item["ingredient"],needed-stock,item["unit"],
-                                      item["product_id"]))
+                upsert_shopping_item(c,item["ingredient"],needed-stock,item["unit"],item["product_id"])
     return jsonify(ok=True)
 
 
@@ -1354,12 +1462,27 @@ def meal_plan():
 def create_meal_plan():
     p=body()
     with db() as c:
+        recipe=c.execute("SELECT * FROM recipes WHERE id=?",(int(p["recipe_id"]),)).fetchone()
+        if not recipe:return jsonify(error="Recept niet gevonden"),404
         new_id=c.execute("""INSERT INTO meal_plan
           (plan_date,meal,recipe_id,servings,note) VALUES(?,?,?,?,?)""",
           (iso_date(p["plan_date"]),str(p.get("meal") or "avondeten"),
            int(p["recipe_id"]),int(p.get("servings") or 2),
            str(p.get("note") or ""))).lastrowid
-    return jsonify(id=new_id),201
+        added=0
+        if p.get("add_to_shopping"):
+            factor=number(p.get("servings"),2,.1)/recipe["servings"]
+            for item in c.execute("SELECT * FROM recipe_items WHERE recipe_id=?",
+                                  (recipe["id"],)).fetchall():
+                stock=0
+                if item["product_id"]:
+                    stock=c.execute("SELECT COALESCE(SUM(quantity),0) FROM stock_lots WHERE product_id=?",
+                                    (item["product_id"],)).fetchone()[0]
+                needed=item["amount"]*factor
+                if stock<needed:
+                    upsert_shopping_item(c,item["ingredient"],needed-stock,item["unit"],item["product_id"])
+                    added+=1
+    return jsonify(id=new_id,shopping_added=added),201
 
 
 @app.delete("/api/meal-plan/<int:plan_id>")

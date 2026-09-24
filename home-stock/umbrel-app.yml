@@ -2,7 +2,7 @@ manifestVersion: 1
 id: home-stock
 category: files
 name: Home Stock
-version: "0.10.0"
+version: "0.11.0"
 tagline: Houd je voorraad, houdbaarheid en boodschappen overzichtelijk bij
 description: >-
   Home Stock is een uitgebreide, volledig zelfgehoste voorraadassistent voor thuis.
@@ -17,6 +17,11 @@ description: >-
   wordt automatisch herkend en kan labels rechtstreeks printen. Browserprinten
   blijft beschikbaar als reserveoptie.
 releaseNotes: >-
+  v0.11.0 voegt locatiekaarten, sorteermogelijkheden, volledige bewerking van
+  losse bakken, veilig productarchief, bewerkbare recepten, slimme
+  maaltijdboodschappen en uitgebreider gebruikersbeheer toe. De scanner is
+  beschermd tegen dubbele scans en afgevinkte boodschappen zijn gezamenlijk
+  op te ruimen.
   v0.10.0 voegt direct verbruiken via de scanner, terugdraaibare voorraadacties,
   opruimen van verlopen partijen, filters, houdbaarheidssjablonen, instelbare
   meldingstijden en verder verbeterde mobiele weergaven toe.

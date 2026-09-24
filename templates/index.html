@@ -43,6 +43,7 @@
       <article><span>Σ</span><small>Totale voorraad</small><b id="stat-units">0</b></article>
       <article><span>◷</span><small>Binnen 7 dagen</small><b id="stat-expiring">0</b></article>
       <article><span>↓</span><small>Bijna op</small><b id="stat-low">0</b></article></div>
+    <div id="location-summary" class="location-summary"></div>
     <div class="grid two"><article class="panel"><div class="panel-head"><div><h2>Aandacht nodig</h2><p>Oudste partijen en lage voorraad</p></div></div><div id="attention-list" class="list"></div></article>
       <article class="panel"><div class="panel-head"><div><h2>Recente activiteit</h2><p>Wie deed wat</p></div></div><div id="recent-list" class="list"></div></article></div>
   </section>
@@ -52,6 +53,7 @@
       <select id="stock-location"><option value="">Alle locaties</option></select>
       <select id="stock-type"><option value="">Alle soorten</option><option value="homemade">Zelfgemaakt</option><option value="store">Winkelproduct</option></select>
       <select id="stock-status"><option value="">Iedere houdbaarheid</option><option value="expired">Over datum</option><option value="soon">Binnen 7 dagen</option><option value="nodate">Zonder datum</option></select>
+      <select id="stock-sort"><option value="expiry">Eerst opmaken</option><option value="name">Naam A–Z</option><option value="stock-asc">Laagste voorraad</option><option value="stock-desc">Hoogste voorraad</option></select>
       <button class="secondary" id="archived-products">Gearchiveerd</button>
       <button class="secondary danger-soft" id="cleanup-expired">Verlopen opruimen</button>
       <button class="secondary" id="scan-open">▣ Barcode scannen</button></div>
@@ -59,7 +61,7 @@
   </section>
 
   <section class="page" id="page-shopping">
-    <div class="grid two"><article class="panel"><div class="panel-head"><div><h2>Boodschappenlijst</h2><p>Minimumvoorraad wordt automatisch aangevuld</p></div></div><div id="shopping-list" class="list"></div></article>
+    <div class="grid two"><article class="panel"><div class="panel-head"><div><h2>Boodschappenlijst</h2><p>Minimumvoorraad wordt automatisch aangevuld</p></div><button class="secondary" id="shopping-clear">Afgevinkt wissen</button></div><div id="shopping-list" class="list"></div></article>
       <article class="panel"><h2>Handmatig toevoegen</h2><form id="shopping-form" class="stack"><label>Product<input name="name" required></label><div class="row"><label>Aantal<input name="quantity" type="number" value="1" min=".01" step=".01"></label><label>Eenheid<input name="unit" value="stuks"></label></div><button class="primary">Toevoegen</button></form></article></div>
   </section>
 
@@ -156,14 +158,15 @@
   </div>
   <div class="modal-actions"><button class="secondary" id="label-skip">Niet printen</button><button class="secondary" id="label-queue">In wachtrij</button><button class="secondary" id="label-browser-print">Via browser printen</button><button class="primary" id="label-print-batch" style="display:none">Alle labels printen</button><button class="primary" id="label-print">Direct printen</button></div></div></dialog>
 
-<dialog id="recipe-dialog"><form id="recipe-form" class="modal"><div class="modal-head"><div><h2>Recept toevoegen</h2></div><button type="button" class="close" data-close>×</button></div>
+<dialog id="recipe-dialog"><form id="recipe-form" class="modal"><input name="recipe_id" type="hidden"><div class="modal-head"><div><h2>Recept toevoegen</h2><p>Bewaar ingrediënten en een duidelijke bereidingswijze.</p></div><button type="button" class="close" data-close>×</button></div>
   <div class="form-grid"><label class="wide">Naam<input name="name" required></label><label>Emoji<input name="emoji" value="🍽️"></label><label>Porties<input name="servings" type="number" min="1" value="2"></label><label>Bereidingstijd<input name="prep_minutes" type="number" min="0"></label></div>
   <h3>Ingrediënten</h3><datalist id="recipe-products"></datalist><div id="ingredient-rows"></div><button type="button" class="secondary" id="add-ingredient">＋ Ingrediënt</button>
   <label>Bereiding<textarea name="instructions" rows="5"></textarea></label><div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Opslaan</button></div></form></dialog>
 
 <dialog id="plan-dialog"><form id="plan-form" class="modal"><div class="modal-head"><h2>Maaltijd plannen</h2><button type="button" class="close" data-close>×</button></div>
   <label>Datum<input name="plan_date" type="date" required></label><label>Moment<select name="meal"><option>ontbijt</option><option>lunch</option><option selected>avondeten</option></select></label>
-  <label>Recept<select name="recipe_id" id="plan-recipe" required></select></label><label>Porties<input name="servings" type="number" value="2" min="1"></label>
+  <label>Recept<select name="recipe_id" id="plan-recipe" required></select></label><label>Porties<input name="servings" type="number" value="2" min="1"></label><label>Notitie<input name="note" placeholder="Bijvoorbeeld: Simon eet mee"></label>
+  <label class="checkline"><input name="add_to_shopping" type="checkbox" checked> Ontbrekende ingrediënten direct op de boodschappenlijst zetten</label>
   <div class="modal-actions"><button type="button" class="secondary" data-close>Annuleren</button><button class="primary">Plannen</button></div></form></dialog>
 
 <dialog id="scan-dialog"><div class="modal"><div class="modal-head"><div><h2>Barcode scannen</h2><p>Richt de camera op een winkelbarcode of Home Stock-label.</p></div><button class="close" data-close>×</button></div>

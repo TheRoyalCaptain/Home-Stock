@@ -8,7 +8,7 @@ services:
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: ghcr.io/theroyalcaptain/home-stock:0.10.0
+    image: ghcr.io/theroyalcaptain/home-stock:0.11.0
     user: "1000:1000"
     init: true
     restart: on-failure
@@ -27,7 +27,7 @@ services:
       retries: 5
 
   printer:
-    image: ghcr.io/theroyalcaptain/home-stock:0.10.0
+    image: ghcr.io/theroyalcaptain/home-stock:0.11.0
     user: "0:0"
     init: true
     restart: on-failure
