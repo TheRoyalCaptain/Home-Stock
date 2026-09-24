@@ -17,14 +17,14 @@ from pathlib import Path
 
 from barcode import Code128
 from barcode.writer import SVGWriter
-from flask import Flask, Response, g, jsonify, render_template, request
+from flask import Flask, Response, g, has_request_context, jsonify, render_template, request
 
 app = Flask(__name__)
 DATA_DIR = Path(os.environ.get("HOME_STOCK_DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "home-stock.db"
-APP_VERSION = "0.11.0"
-USER_AGENT = "HomeStock/0.11 (https://github.com/TheRoyalCaptain/Home-Stock)"
+APP_VERSION = "0.12.0"
+USER_AGENT = "HomeStock/0.12 (https://github.com/TheRoyalCaptain/Home-Stock)"
 PRINT_SERVICE_URL = os.environ.get("HOME_STOCK_PRINT_SERVICE_URL", "http://printer:8631").rstrip("/")
 
 
@@ -115,6 +115,17 @@ def setting(connection, key, default=""):
 
 def body():
     return request.get_json(silent=True) or {}
+
+
+def request_language():
+    """Return the selected UI language for AI output and printed labels."""
+    if not has_request_context():
+        return "nl"
+    value = (request.headers.get("X-Home-Stock-Language") or
+             request.cookies.get("home_stock_language") or
+             request.accept_languages.best_match(["nl", "en", "de"]) or "nl")
+    value = str(value).lower().split("-")[0]
+    return value if value in {"nl", "en", "de"} else "nl"
 
 
 def decode_barcode_image(image_bytes):
@@ -433,12 +444,14 @@ def estimate_gemini(c, name, category, location_name, opened=False):
     if not api_key:
         return None
     model = setting(c, "gemini_model", "gemini-3.1-flash-lite")
+    language = {"nl":"Nederlands", "en":"English", "de":"Deutsch"}[request_language()]
     prompt = (
         "Schat conservatief de voedselveilige houdbaarheid in dagen. "
         "Geef alleen JSON volgens schema. Product: %s. Categorie: %s. "
-        "Bewaarlocatie: %s. Status: %s. Gebruik Nederlandse omstandigheden."
+        "Bewaarlocatie: %s. Status: %s. Gebruik Nederlandse omstandigheden. "
+        "Schrijf category, storage_tip en reason in %s."
         % (name, category or "onbekend", location_name,
-           "geopend" if opened else "ongeopend of vers bereid")
+           "geopend" if opened else "ongeopend of vers bereid", language)
     )
     schema = {"type":"object","properties":{
         "days":{"type":"integer","minimum":1,"maximum":3650},
@@ -472,8 +485,9 @@ def generate_preparation_gemini(c, name, contents, portion_grams=None):
     model = setting(c, "gemini_model", "gemini-3.1-flash-lite")
     grams = number(portion_grams, 0, 0)
     portion_text = f"{grams:g} gram" if grams else "niet opgegeven"
+    language = {"nl":"Nederlands", "en":"English", "de":"Deutsch"}[request_language()]
     prompt = (
-        "Schrijf één concrete, ultrakorte Nederlandse bereidings- of opwarminstructie "
+        f"Schrijf één concrete, ultrakorte bereidings- of opwarminstructie in {language} "
         "voor een klein voedselbewaarlabel. Baseer die op zowel de naam als de opgegeven "
         "ingrediënten. Kies de meest geschikte methode. Noem altijd een tijdsduur én "
         "óf een temperatuur in °C óf een magnetronvermogen in watt, bijvoorbeeld: "
@@ -1326,7 +1340,8 @@ def test_server_printer():
         printer=str(p.get("printer") or setting(c,"default_printer",""))
         size=str(p.get("label_size") or setting(c,"label_size","101x54"))
     try:
-        return jsonify(print_service("/test",{"printer":printer,"label_size":size}))
+        return jsonify(print_service("/test",{"printer":printer,"label_size":size,
+                                                "language":request_language()}))
     except RuntimeError as error:
         return jsonify(error=str(error)),503
 
@@ -1349,7 +1364,7 @@ def print_server_label(job_id):
           "expiry_date":job["expiry_date"],"placed_by":job["placed_by"],
           "footer":job["lot_code"] or "Home Stock",
           "barcode":job["lot_code"] or job["name"],"copies":job["copies"],
-          "label_size":job["label_size"]}
+          "label_size":job["label_size"],"language":request_language()}
     try:
         result=print_service("/print",payload)
     except RuntimeError as error:

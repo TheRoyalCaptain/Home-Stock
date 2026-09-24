@@ -123,6 +123,16 @@ webcontainer.
 
 ## Versiegeschiedenis
 
+### v0.12.0
+
+- Volledige interface beschikbaar in Nederlands, Engels en Duits
+- Taalkeuze op het inlogscherm, gebruikersbeheer en in de hoofdinterface
+- De taalvoorkeur blijft per browser en geïnstalleerde webapp bewaard
+- Getallen, valuta, kalenderdatums en houdbaarheidsdatums volgen de gekozen taal
+- Dynamische formulieren, scannerstatussen, meldingen en foutteksten worden vertaald
+- Gemini schrijft houdbaarheidsadviezen en bereidingswijzen in de gekozen taal
+- Verticale DYMO 99014-labels gebruiken de gekozen taal en lokale maandnamen
+
 ### v0.11.0
 
 - Locatiekaarten op het dashboard met aantallen, voorraad en verlopen partijen

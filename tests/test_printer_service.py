@@ -27,6 +27,10 @@ class PrinterServiceTest(unittest.TestCase):
     def test_dutch_label_date(self):
         self.assertEqual(printer_service.label_date("2026-07-20"),"20 JUL 2026")
 
+    def test_label_dates_follow_selected_language(self):
+        self.assertEqual(printer_service.label_date("2026-03-20", "en"), "20 MAR 2026")
+        self.assertEqual(printer_service.label_date("2026-03-20", "de"), "20 MÄR 2026")
+
     def test_detects_only_supported_usb_dymo(self):
         output = """direct usb://DYMO/LabelWriter%20450?serial=ABC
 direct usb://DYMO/LabelWriter%20550?serial=NOPE

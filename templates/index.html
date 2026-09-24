@@ -10,6 +10,7 @@
   <title>Home Stock</title><link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/styles.css?v={{ version }}">
+  <script src="/static/i18n.js?v={{ version }}"></script>
 </head>
 <body>
 <aside class="sidebar">
@@ -34,7 +35,7 @@
 </aside>
 <main>
   <header class="topbar"><div class="page-heading"><span class="eyebrow">HOME STOCK</span><h1 id="page-title">Overzicht</h1><p id="page-subtitle">Je huishouden in één oogopslag.</p></div>
-    <div class="header-actions"><button class="icon-btn" id="theme-toggle" title="Kleurmodus wisselen" aria-label="Kleurmodus wisselen">◐</button><button class="icon-btn" id="header-scan" title="Barcode scannen" aria-label="Barcode scannen">⌗</button><button class="icon-btn" id="notifications-btn" title="Meldingen" aria-label="Meldingen">♢<b id="notification-count"></b></button>
+    <div class="header-actions"><label class="language-control"><span>Taal</span><select data-language-select><option value="nl">Nederlands</option><option value="en">English</option><option value="de">Deutsch</option></select></label><button class="icon-btn" id="theme-toggle" title="Kleurmodus wisselen" aria-label="Kleurmodus wisselen">◐</button><button class="icon-btn" id="header-scan" title="Barcode scannen" aria-label="Barcode scannen">⌗</button><button class="icon-btn" id="notifications-btn" title="Meldingen" aria-label="Meldingen">♢<b id="notification-count"></b></button>
     <button class="primary add-product-button" id="add-product"><span>＋</span> Product toevoegen</button></div></header>
 
   <section class="page active" id="page-dashboard">

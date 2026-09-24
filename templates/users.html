@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#14241e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Home Stock">
-<title>Home Stock · Gebruikers</title><link rel="manifest" href="/static/manifest.webmanifest"><link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"><link rel="stylesheet" href="/static/styles.css"></head>
-<body class="standalone-body"><main class="standalone-main">
+<title>Home Stock · Gebruikers</title><link rel="manifest" href="/static/manifest.webmanifest"><link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"><link rel="stylesheet" href="/static/styles.css"><script src="/static/i18n.js?v=0.12.0"></script></head>
+<body class="standalone-body"><label class="language-control standalone-language"><span>Taal</span><select data-language-select><option value="nl">Nederlands</option><option value="en">English</option><option value="de">Deutsch</option></select></label><main class="standalone-main">
 <div class="standalone-head"><div><span class="eyebrow">BEHEER</span><h1>Gebruikers beheren</h1><p>Accounts en toegangsrechten voor Home Stock.</p></div><a class="secondary" href="/">← Terug naar Home Stock</a></div>
 <section class="panel"><h2>Accounts</h2>
 {% if request.args.get('reset') %}<p role="status">Tijdelijk wachtwoord ingesteld. De gebruiker moet dit na de volgende login wijzigen.</p>{% endif %}

@@ -88,6 +88,8 @@ class AuthenticationTest(unittest.TestCase):
         self.assertEqual(replay.get("/api/products").status_code, 401)
         response = admin.get("/")
         self.assertEqual(response.status_code, 200)
+        self.assertIn('data-language-select', response.text)
+        self.assertIn('/static/i18n.js?v=0.12.0', response.text)
         self.assertIn("no-store", response.headers["Cache-Control"])
         csrf = re.search(r'name="csrf-token" content="([^"]+)"', response.text)[1]
         self.assertEqual(admin.post("/api/products", json={"name":"Test"}).status_code, 403)

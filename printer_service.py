@@ -69,11 +69,34 @@ def safe_text(value, limit):
     return str(value or "").replace("\n", " ").strip()[:limit]
 
 
-def label_date(value):
+LABEL_TEXT = {
+    "nl": {"unknown_location":"ONBEKENDE LOCATIE","homemade":"ZELFGEMAAKT","store":"WINKELPRODUCT",
+           "contents":"INHOUD / INGREDIËNTEN","preparation":"BEREIDINGSWIJZE","not_set":"Niet ingesteld",
+           "prepared":"BEREID","produced":"GEPRODUCEERD","stored":"INGELEGD","expiry":"EINDDATUM",
+           "stored_by":"INGELEGD DOOR","unknown":"ONBEKEND","product_info":"PRODUCTINFORMATIE",
+           "batch":"PARTIJ","storage_label":"HOME STOCK · BEWAARETIKET"},
+    "en": {"unknown_location":"UNKNOWN LOCATION","homemade":"HOMEMADE","store":"STORE PRODUCT",
+           "contents":"CONTENTS / INGREDIENTS","preparation":"PREPARATION","not_set":"Not set",
+           "prepared":"PREPARED","produced":"PRODUCED","stored":"STORED","expiry":"EXPIRY DATE",
+           "stored_by":"STORED BY","unknown":"UNKNOWN","product_info":"PRODUCT INFORMATION",
+           "batch":"BATCH","storage_label":"HOME STOCK · STORAGE LABEL"},
+    "de": {"unknown_location":"UNBEKANNTER LAGERORT","homemade":"SELBSTGEMACHT","store":"LADENPRODUKT",
+           "contents":"INHALT / ZUTATEN","preparation":"ZUBEREITUNG","not_set":"Nicht festgelegt",
+           "prepared":"ZUBEREITET","produced":"PRODUZIERT","stored":"EINGELAGERT","expiry":"ABLAUFDATUM",
+           "stored_by":"EINGELAGERT VON","unknown":"UNBEKANNT","product_info":"PRODUKTINFORMATIONEN",
+           "batch":"CHARGE","storage_label":"HOME STOCK · LAGERETIKET"},
+}
+
+
+def label_date(value, language="nl"):
     if not value:return "—"
     try:
         year,month,day=str(value).split("-")[:3]
-        months=["JAN","FEB","MRT","APR","MEI","JUN","JUL","AUG","SEP","OKT","NOV","DEC"]
+        months={
+            "nl":["JAN","FEB","MRT","APR","MEI","JUN","JUL","AUG","SEP","OKT","NOV","DEC"],
+            "en":["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"],
+            "de":["JAN","FEB","MÄR","APR","MAI","JUN","JUL","AUG","SEP","OKT","NOV","DEZ"],
+        }.get(language, ["JAN","FEB","MRT","APR","MEI","JUN","JUL","AUG","SEP","OKT","NOV","DEC"])
         return f"{int(day):02d} {months[int(month)-1]} {year}"
     except (ValueError,IndexError):return safe_text(value,20)
 
@@ -99,10 +122,15 @@ def label_pdf(data, path):
     width, height = sizes.get(data.get("label_size"), sizes["57x32"])
     canvas = Canvas(str(path), pagesize=(width, height), pageCompression=1)
     margin=2.3*mm;name=safe_text(data.get("name"),70)
+    language=data.get("language") if data.get("language") in LABEL_TEXT else "nl"
+    words=LABEL_TEXT[language]
     value=safe_text(data.get("barcode"),80) or "HOME-STOCK"
     if data.get("label_size")=="101x54":
-        location=safe_text(data.get("location") or "ONBEKENDE LOCATIE",30).upper()
-        kind="ZELFGEMAAKT" if data.get("product_type")=="homemade" else "WINKELPRODUCT"
+        fixed_locations={"en":{"koelkast":"Fridge","vriezer":"Freezer","voorraadkast":"Pantry"},
+                         "de":{"koelkast":"Kühlschrank","vriezer":"Gefrierschrank","voorraadkast":"Vorratsschrank"}}
+        raw_location=safe_text(data.get("location") or words["unknown_location"],30)
+        location=fixed_locations.get(language,{}).get(raw_location.lower(),raw_location).upper()
+        kind=words["homemade"] if data.get("product_type")=="homemade" else words["store"]
         canvas.setFillColorRGB(0,0,0);canvas.roundRect(margin,height-margin-18,width-2*margin,18,3,fill=1,stroke=0)
         canvas.setFillColorRGB(1,1,1);canvas.setFont("Helvetica-Bold",7);canvas.drawString(margin+5,height-margin-11,location)
         canvas.setFont("Helvetica",5);canvas.drawRightString(width-margin-5,height-margin-11,kind)
@@ -111,25 +139,25 @@ def label_pdf(data, path):
         canvas.setFont("Helvetica-Bold",22);canvas.drawCentredString(width/2,height-margin-76,safe_text(data.get("lot_code") or data.get("short_code"),12))
         barcode=code128.Code128(value,barHeight=8*mm,barWidth=.22*mm,humanReadable=False)
         scale=min(1,(width-2*margin)/barcode.width);canvas.saveState();canvas.translate(margin,height-margin-106);canvas.scale(scale,1);barcode.drawOn(canvas,0,0);canvas.restoreState()
-        canvas.setFont("Helvetica-Bold",5.2);canvas.drawString(margin,height-margin-116,"INHOUD / INGREDIËNTEN")
+        canvas.setFont("Helvetica-Bold",5.2);canvas.drawString(margin,height-margin-116,words["contents"])
         wrapped(canvas,data.get("contents") or name,margin,height-margin-125,width-2*margin,"Helvetica",6.3,2,7)
         canvas.line(margin,height-margin-137,width-margin,height-margin-137)
-        canvas.setFont("Helvetica-Bold",5.2);canvas.drawString(margin,height-margin-144,"BEREIDINGSWIJZE")
-        wrapped(canvas,data.get("preparation_instructions") or "Niet ingesteld",margin,height-margin-152,width-2*margin,"Helvetica",5.5,3,6)
+        canvas.setFont("Helvetica-Bold",5.2);canvas.drawString(margin,height-margin-144,words["preparation"])
+        wrapped(canvas,data.get("preparation_instructions") or words["not_set"],margin,height-margin-152,width-2*margin,"Helvetica",5.5,3,6)
         box_y=27*mm;box_h=12*mm;gap=1.5*mm;box_w=(width-2*margin-gap)/2
         production=data.get("production_date") or data.get("purchase_date")
-        production_title=("BEREID" if data.get("product_type")=="homemade" else "GEPRODUCEERD") if data.get("production_date") else "INGELEGD"
-        for x,title,value_date in ((margin,production_title,production),(margin+box_w+gap,"EINDDATUM",data.get("expiry_date"))):
-            canvas.roundRect(x,box_y,box_w,box_h,3,fill=0,stroke=1);canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(x+4,box_y+box_h-8,title);canvas.setFont("Helvetica-Bold",7);canvas.drawString(x+4,box_y+7,label_date(value_date))
-        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,24*mm,"INGELEGD DOOR "+safe_text(data.get("placed_by") or "ONBEKEND",24).upper())
+        production_title=(words["prepared"] if data.get("product_type")=="homemade" else words["produced"]) if data.get("production_date") else words["stored"]
+        for x,title,value_date in ((margin,production_title,production),(margin+box_w+gap,words["expiry"],data.get("expiry_date"))):
+            canvas.roundRect(x,box_y,box_w,box_h,3,fill=0,stroke=1);canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(x+4,box_y+box_h-8,title);canvas.setFont("Helvetica-Bold",7);canvas.drawString(x+4,box_y+7,label_date(value_date,language))
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,24*mm,words["stored_by"]+" "+safe_text(data.get("placed_by") or words["unknown"],24).upper())
         canvas.drawRightString(width-margin,24*mm,safe_text(data.get("detail"),30))
         canvas.line(margin,21.5*mm,width-margin,21.5*mm)
         descriptor=" · ".join(x for x in (safe_text(data.get("brand"),25),safe_text(data.get("category"),25)) if x)
-        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,16.5*mm,"PRODUCTINFORMATIE")
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,16.5*mm,words["product_info"])
         canvas.setFont("Helvetica",6.5);canvas.drawString(margin,13*mm,descriptor or kind.title())
-        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,7.5*mm,"PARTIJ")
+        canvas.setFont("Helvetica-Bold",5.5);canvas.drawString(margin,7.5*mm,words["batch"])
         canvas.setFont("Helvetica",6.5);canvas.drawRightString(width-margin,7.5*mm,safe_text(data.get("footer"),60))
-        canvas.setFont("Helvetica",4.5);canvas.drawCentredString(width/2,2*mm,"HOME STOCK · BEWAARETIKET")
+        canvas.setFont("Helvetica",4.5);canvas.drawCentredString(width/2,2*mm,words["storage_label"])
     else:
         canvas.setFont("Helvetica-Bold",9);canvas.drawString(margin,height-margin-7,name)
         canvas.setFont("Helvetica-Bold",13);canvas.drawRightString(width-margin,height-margin-18,safe_text(data.get("lot_code") or data.get("short_code"),12))
@@ -185,9 +213,15 @@ def print_label():
 @app.post("/test")
 def test_label():
     data = request.get_json(silent=True) or {}
+    language = data.get("language") if data.get("language") in LABEL_TEXT else "nl"
+    test_copy = {
+        "nl":("DYMO-testlabel · direct vanaf de server","Printer correct ingesteld"),
+        "en":("DYMO test label · directly from the server","Printer configured correctly"),
+        "de":("DYMO-Testetikett · direkt vom Server","Drucker korrekt eingerichtet"),
+    }[language]
     try:
         return jsonify(ok=True, **submit({**data, "name":"Home Stock",
-            "detail":"DYMO-testlabel · direct vanaf de server",
-            "footer":"Printer correct ingesteld", "barcode":"HOME-STOCK-TEST", "copies":1}))
+            "detail":test_copy[0], "footer":test_copy[1],
+            "barcode":"HOME-STOCK-TEST", "copies":1}))
     except (RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         return jsonify(error=str(error)), 503
